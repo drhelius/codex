@@ -9,7 +9,7 @@
       "published_at": "2026-09-29T08:05:42Z",
       "revision": 1,
       "branch": "fork-candidates/398926954-r1",
-      "status": "building",
+      "status": "published",
       "attempts": 0,
       "pr": null,
       "base_sha": "ff98a8e255b0313b0c7820b6340916fbc141c7d7",
@@ -20,7 +20,9 @@
       "request": "bed4283defcc49e5a929d328e704ac33",
       "build_run": 36602958455,
       "issue": 1,
-      "reviewed": true
+      "reviewed": true,
+      "fork_release": "https://github.com/drhelius/codex/releases/tag/mcp-rust-v0.159.0-r1",
+      "fork_sha": "bf7d0773fc9cfb19700089153420d2214359ae63"
     }
   ]
 }
