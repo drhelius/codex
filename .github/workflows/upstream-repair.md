@@ -152,7 +152,8 @@ re-merge, rebase, squash that baseline, edit state, or change workflow policy.
    Never create a second PR, target upstream, push directly, merge or publish.
 6. Include the upstream tag, exact upstream/base/integration/source SHAs, failed
    run URL, demonstrated cause, repair summary and actual command results in the
-   PR. State any unrun check. Independent five-platform validation is mandatory.
+   PR. State any unrun check. Independent validation of every active release target
+   is mandatory; the owner currently enables macOS ARM64 only.
    The owner merges the repair PR into the candidate branch after reviewing it;
    that merge automatically starts validation and publication. No auto-approval
    or auto-merge is enabled. Exit with quiet `noop` if no new repair is possible.

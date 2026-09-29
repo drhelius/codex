@@ -436,7 +436,7 @@ class MaintenanceTests(unittest.TestCase):
         ):
             m.publish_verified(coordinator, row, workflow)
             self.assertFalse(coordinator.api.release["draft"])
-            self.assertEqual(len(coordinator.api.assets), 12)
+            self.assertEqual(len(coordinator.api.assets), 2 * len(m.TARGETS) + 2)
             count = len(coordinator.api.assets)
             m.publish_verified(coordinator, row, workflow)
             self.assertEqual(len(coordinator.api.assets), count)
@@ -447,7 +447,8 @@ class MaintenanceTests(unittest.TestCase):
         coordinator = Harness([row])
         workflow = run(row)
         fill_artifacts(coordinator.api, row, workflow)
-        coordinator.api.bundles["0"] = coordinator.api.bundles["1"]
+        with patch.object(m, "TARGETS", ["fixture-other-target"]):
+            fill_artifacts(coordinator.api, row, workflow)
         with self.assertRaises(RuntimeError):
             m.publish_verified(coordinator, row, workflow)
         self.assertFalse(coordinator.history)

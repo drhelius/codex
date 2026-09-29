@@ -58,7 +58,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, macos-15, windows-2025]
+        runner:
+          - macos-15
+          # - ubuntu-24.04
+          # - windows-2025
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
     steps:
@@ -77,14 +80,19 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        platform: [macos-arm, macos-intel, linux-intel, linux-arm, windows]
+        platform:
+          - macos-arm
+          # - macos-intel
+          # - linux-intel
+          # - linux-arm
+          # - windows
         phase: [tests, package]
         include:
           - {platform: macos-arm, runner: macos-15, target: aarch64-apple-darwin, jobs: 2}
-          - {platform: macos-intel, runner: macos-15-intel, target: x86_64-apple-darwin, jobs: 4}
-          - {platform: linux-intel, runner: ubuntu-24.04, target: x86_64-unknown-linux-musl, jobs: 4}
-          - {platform: linux-arm, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, jobs: 4}
-          - {platform: windows, runner: windows-2025, target: x86_64-pc-windows-msvc, jobs: 4}
+          # - {platform: macos-intel, runner: macos-15-intel, target: x86_64-apple-darwin, jobs: 4}
+          # - {platform: linux-intel, runner: ubuntu-24.04, target: x86_64-unknown-linux-musl, jobs: 4}
+          # - {platform: linux-arm, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, jobs: 4}
+          # - {platform: windows, runner: windows-2025, target: x86_64-pc-windows-msvc, jobs: 4}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 300
     env:

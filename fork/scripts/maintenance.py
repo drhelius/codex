@@ -27,10 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]
 BOOT = json.loads((ROOT / "fork/bootstrap.json").read_text())
 TARGETS = [
     "aarch64-apple-darwin",
-    "x86_64-apple-darwin",
-    "x86_64-unknown-linux-musl",
-    "aarch64-unknown-linux-musl",
-    "x86_64-pc-windows-msvc",
+    # "x86_64-apple-darwin",
+    # "x86_64-unknown-linux-musl",
+    # "aarch64-unknown-linux-musl",
+    # "x86_64-pc-windows-msvc",
 ]
 # These are owned by the fork, restored after merges and checked independently of candidate code.
 BOUNDARY = [
@@ -961,7 +961,7 @@ def publish_verified(coordinator, record, run):
                 "name": "Unofficial Codex MCP " + tag,
                 "draft": True,
                 "prerelease": False,
-                "body": f"Unofficial Codex CLI with conversation-local MCP server selection.\n\nUpstream `{record['tag']}`: `{record['upstream_sha']}`\nFork: `{record['source_sha']}`\n\n[Validated build]({run['html_url']}) · [Installation and rollback](https://github.com/{REPO}/blob/{record['source_sha']}/fork/README.md)\n\nAll five targets passed. No upstream signing or notarization is claimed. Install alongside official Codex using `bin/codex-mcp`.",
+                "body": f"Unofficial Codex CLI with conversation-local MCP server selection.\n\nUpstream `{record['tag']}`: `{record['upstream_sha']}`\nFork: `{record['source_sha']}`\n\n[Validated build]({run['html_url']}) · [Installation and rollback](https://github.com/{REPO}/blob/{record['source_sha']}/fork/README.md)\n\nAll required targets passed: {', '.join(TARGETS)}. No upstream signing or notarization is claimed. Install alongside official Codex using `bin/codex-mcp`.",
             },
         )
     existing = {

@@ -5,6 +5,9 @@ selection. It installs alongside official `codex`. Both commands keep their own
 executables, helpers and update paths. The installers never uninstall another
 Codex, change its files, or edit your Codex configuration.
 
+New builds target macOS ARM64 only. Instructions for other platforms remain
+available for earlier releases that contain their matching archive.
+
 ## macOS and Linux
 
 ```sh

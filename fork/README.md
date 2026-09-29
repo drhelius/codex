@@ -116,11 +116,12 @@ with an `upstream` remote and Actions checkouts with only `origin`.
 ## Validation, releases and recovery
 
 `fork-build.yml` runs without repository-write/publication credentials. Fast policy
-and native macOS/Linux/Windows installer checks must pass before the Rust matrix
-starts. It installs the release's exact Rust toolchain, uses locked Cargo
-dependencies and builds on standard hosted runners for macOS ARM64/x86_64,
-Linux ARM64/x86_64 (musl) and Windows x86_64. A failed target cancels the remaining
-matrix work; publication still requires all five targets to succeed. Each target has
+and native macOS installer checks must pass before the Rust matrix starts.
+The active release target is **macOS ARM64** (`aarch64-apple-darwin`), using the
+release's exact Rust toolchain, locked Cargo dependencies and standard hosted runners.
+macOS Intel, Linux and Windows entries remain commented in the workflow and
+`maintenance.py`'s `TARGETS`; re-enabling a platform requires updating both.
+A failed target cancels the remaining matrix work. Each active target has
 two parallel jobs: deterministic selector/MCP tests and optimized distribution
 builds with extracted-archive smoke tests. Both phases must succeed on all targets;
 an uploaded package cannot bypass a failed test job. Archive checks use a local
@@ -155,8 +156,9 @@ glibc-compatible system for ripgrep. The
 optional separately distributed voice runtime and desktop applications are not
 part of this CLI package. The CLI's regular features and sandboxing remain enabled.
 
-Publication requires success of the entire workflow and exactly five verified
-platform artifacts from that run. A trusted coordinator checks manifests,
+Publication requires success of the entire workflow and the exact active target
+artifact set from that run (currently one macOS ARM64 archive). Previously published
+multi-platform releases remain available. A trusted coordinator checks manifests,
 SHA-256 digests, ancestry and the expected maintained-branch tip, promotes the
 exact tested commit and uses immutable `mcp-<upstream-tag>-rN` tags. It creates a
 draft, verifies every uploaded asset, then publishes. `release.json`, per-target

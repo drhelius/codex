@@ -68,4 +68,5 @@ Run `python3 fork/scripts/validate.py setup` once if the declared toolchain,
 `just` or nextest is missing, then `python3 fork/scripts/validate.py tests` from
 the repository root. It uses checksum-verified upstream V8 inputs. Cargo dependencies
 remain locked. No test may be disconnected, weakened or skipped by a repair agent.
-Keep this behavior and the independent full platform matrix across integrations.
+Keep this behavior and independent validation of every owner-enabled release target
+across integrations. The current release target is macOS ARM64.
