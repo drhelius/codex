@@ -30,6 +30,11 @@ Choices are never written to `config.toml` or conversation rollout settings;
 other conversations are independent. Children inherit the parent turn's limits
 and cannot expand them with the selector.
 
+Ordinary local fork sessions, including resume and fork, use their embedded
+app-server instead of attaching to the official shared daemon. Explicit `--remote`
+connections and the daemon-wide `agents` overview retain their selected server;
+that server must also contain the fork's MCP API to support `/mcp select`.
+
 Deselecting removes tools, resource access and other callable surfaces for the
 next turn; stale names also fail at dispatch. The existing owned process stays
 alive internally, preserving desktop state. Reselecting reuses a healthy
@@ -63,6 +68,8 @@ runtime identity checks and replace only affected connections.
   apply/cancel and rendering snapshot.
 - `fork/tests/archive_smoke.py`: extracted native CLI, helper discovery,
   app-server API, local MCP/model, process reuse and fresh-process resume defaults.
+- `fork/tests/daemon_isolation_smoke.py`: real TUI startup and selector display
+  beside an existing daemon socket, resume/fork pickers, and explicit remote routing.
 
 Run `python3 fork/scripts/validate.py setup` once if the declared toolchain,
 `just` or nextest is missing, then `python3 fork/scripts/validate.py tests` from

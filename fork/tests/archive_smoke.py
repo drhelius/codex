@@ -128,6 +128,9 @@ def smoke(directory):
     help_text = subprocess.check_output([str(binary), "--help"], text=True)
     check("Unofficial DrHelius" in help_text, "Fork identity missing")
     check("Usage: codex-mcp" in help_text, "Fork command name missing")
+    from daemon_isolation_smoke import smoke as smoke_daemon_isolation
+
+    smoke_daemon_isolation(binary)
     from installer_smoke import smoke as smoke_installer
 
     smoke_installer(binary)

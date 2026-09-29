@@ -26,6 +26,10 @@ internal `codex` and helper names cannot shadow your official installation.
 The installer adds that bin directory to your shell profile when necessary.
 Open a new terminal afterward, or run `~/.local/bin/codex-mcp` immediately.
 
+Local sessions use the fork's embedded server so an already-running official
+daemon cannot take over `/mcp select`. The initial `-r1` release requires
+`codex-mcp --no-daemon` for this isolation; later corrected builds apply it by default.
+
 ## Windows x86_64
 
 Run in Windows PowerShell 5.1 or PowerShell 7:

@@ -141,6 +141,12 @@ def tests():
     output = RS / "target" / target / "debug" if TARGET else RS / "target/debug"
     suffix = ".exe" if os.name == "nt" else ""
     os.environ["CARGO_BIN_EXE_codex"] = str(output / ("codex" + suffix))
+    run(
+        sys.executable,
+        POLICY / "fork/tests/daemon_isolation_smoke.py",
+        output / ("codex" + suffix),
+        cwd=ROOT,
+    )
     for binary in output.glob("test_*" + suffix):
         if binary.is_file() and (
             binary.suffix == ".exe" if suffix else not binary.suffix

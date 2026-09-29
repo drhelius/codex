@@ -18,6 +18,15 @@ pub(super) async fn run_main_inner(
             "--no-daemon cannot be used with --remote.",
         ));
     }
+    // The official daemon does not implement the fork's conversation-local MCP API.
+    // Keep ordinary local sessions in this process; explicit remote connections and
+    // the daemon-wide agents overview retain their requested server selection.
+    if option_env!("CODEX_GEAR_FORK").is_some()
+        && explicit_remote_endpoint.is_none()
+        && !cli.agents_overview
+    {
+        cli.no_daemon = true;
+    }
     if explicit_remote_endpoint.is_some() && !cli.add_dir.is_empty() {
         return Err(std::io::Error::other(
             "--add-dir is not supported with --remote. Configure additional workspace roots on the server.",
