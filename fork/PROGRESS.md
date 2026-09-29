@@ -10,6 +10,7 @@
 - [x] Run local script, PowerShell, workflow and compiler-consistency checks.
 - [x] Sign and push the installer/build fixes (`f79c45f688`).
 - [x] Diagnose the handoff's transient GitHub API 504 and add bounded read-only retries.
+- [x] Fix incompatible PowerShell module inheritance exposed by the fast native Windows gate.
 - [ ] Supersede the obsolete build and hand the replacement run to Actions.
 
 Local checks: 28 offline fixtures pass; the two native Windows fixtures remain

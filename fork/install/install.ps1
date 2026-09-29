@@ -2,6 +2,9 @@ param([string]$Release = $(if ($env:CODEX_MCP_RELEASE) { $env:CODEX_MCP_RELEASE 
 # Windows PowerShell 5.1 and PowerShell 7. No administrator rights are needed.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+# An intermediate CLI/Python process can pass PowerShell 7's module paths to
+# Windows PowerShell 5.1. Load hashing and web helpers from this runtime explicitly.
+Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Utility"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 if ($env:OS -ne 'Windows_NT' -or $env:PROCESSOR_ARCHITECTURE -notin @('AMD64', 'x86') -or
     -not [Environment]::Is64BitOperatingSystem) { throw 'This installer requires Windows x86_64.' }
