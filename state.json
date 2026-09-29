@@ -31,7 +31,7 @@
       "published_at": "2026-09-29T20:32:34Z",
       "revision": 1,
       "branch": "fork-candidates/399499631-r1",
-      "status": "repairing",
+      "status": "building",
       "attempts": 2,
       "pr": 3,
       "base_sha": "d209c510e6a7d3652496c9e7443830f6ad78900a",
@@ -42,7 +42,8 @@
       "diagnostic": "Mechanical integration has merge conflicts; inspect the candidate conflict markers",
       "repair_request": "2aabeae5fe39490986d105e038a2cf99",
       "issue": 2,
-      "reviewed": false
+      "reviewed": false,
+      "request": "e1617bd856fc49899e1210e57c23201a"
     }
   ]
 }
