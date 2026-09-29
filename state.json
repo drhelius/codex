@@ -9,9 +9,14 @@
       "published_at": "2026-09-29T08:05:42Z",
       "revision": 1,
       "branch": "fork-candidates/398926954-r1",
-      "status": "pending",
+      "status": "integrated",
       "attempts": 0,
-      "pr": null
+      "pr": null,
+      "base_sha": "ff98a8e255b0313b0c7820b6340916fbc141c7d7",
+      "policy_sha": "ff98a8e255b0313b0c7820b6340916fbc141c7d7",
+      "source_sha": "ff98a8e255b0313b0c7820b6340916fbc141c7d7",
+      "integration_sha": "ff98a8e255b0313b0c7820b6340916fbc141c7d7",
+      "conflicts": ""
     }
   ]
 }
