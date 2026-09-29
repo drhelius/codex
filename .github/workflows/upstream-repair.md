@@ -32,6 +32,22 @@ engine:
   id: copilot
   version: 1.0.80
 timeout-minutes: 55
+jobs:
+  notify:
+    needs: [agent, safe_outputs]
+    if: always() && github.repository == 'drhelius/codex' && github.ref == 'refs/heads/fork-main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'fork-coordinator.yml', ref: 'fork-main',
+              inputs: {completed_run: String(context.runId)}
+            });
 checkout:
   ref: ${{ inputs.source_sha }}
   fetch-depth: 0

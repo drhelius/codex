@@ -18,7 +18,11 @@ async fn update_does_not_start_interactive_prompt() -> Result<()> {
         .arg("update")
         .assert()
         .failure()
-        .stderr(contains("`codex update` is not available in debug builds"));
+        .stderr(contains(if option_env!("CODEX_GEAR_FORK").is_some() {
+            "Install codex-mcp using fork/install/install.sh"
+        } else {
+            "`codex update` is not available in debug builds"
+        }));
 
     Ok(())
 }

@@ -118,14 +118,19 @@ class App:
 
 def smoke(directory):
     suffix = ".exe" if os.name == "nt" else ""
-    binary = directory / "bin" / ("codex-gear" + suffix)
+    binary = directory / "bin" / ("codex-mcp" + suffix)
     output = subprocess.check_output([str(binary), "--version"], text=True)
+    package = json.loads((directory / "codex-package.json").read_text())
     check(
-        len(output.splitlines()) == 1 and "+gear" in output,
-        "Fork version metadata missing",
+        output.strip() == "codex-cli " + package["version"],
+        "CLI version does not match its package metadata",
     )
     help_text = subprocess.check_output([str(binary), "--help"], text=True)
     check("Unofficial DrHelius" in help_text, "Fork identity missing")
+    check("Usage: codex-mcp" in help_text, "Fork command name missing")
+    from installer_smoke import smoke as smoke_installer
+
+    smoke_installer(binary)
     for command in (
         [directory / "bin" / ("codex-code-mode-host" + suffix), "--help"],
         [directory / "codex-path" / ("rg" + suffix), "--version"],
@@ -162,8 +167,8 @@ def smoke(directory):
         )
         check(
             update.returncode != 0
-            and "https://github.com/drhelius/codex/releases" in update.stderr,
-            "Fork updater did not reject the upstream replacement path",
+            and "Install codex-mcp using fork/install/install.sh" in update.stderr,
+            "An unmanaged archive must direct updates to the fork installer",
         )
         spawns = temporary / "spawns.log"
         requests = []

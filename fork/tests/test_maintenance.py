@@ -48,11 +48,16 @@ class FakeAPI:
         self.bundles = {}
         self.release = None
         self.tag = None
+        self.runs = []
 
     def request(self, path, method="GET", data=None, binary=False):
         self.calls.append((path, method, data))
         if "/dispatches" in path or "/statuses/" in path:
             return None
+        if path.endswith("/actions/runs/101"):
+            return self.runs[0]
+        if path.endswith("/actions/workflows/17"):
+            return {"path": ".github/workflows/fork-build.yml"}
         if path.endswith("/git/ref/heads/fork-main"):
             return {"object": {"sha": B}}
         if "/commits/" in path:
@@ -95,6 +100,8 @@ class FakeAPI:
         return None
 
     def pages(self, path, key=None):
+        if "/runs?event=workflow_dispatch" in path:
+            return self.runs
         if path.endswith("/releases"):
             return self.releases
         if "/pulls?" in path:
@@ -149,12 +156,19 @@ def run(row, success=True):
         "head_sha": B,
         "conclusion": "success" if success else "failure",
         "html_url": "https://github.com/drhelius/codex/actions/runs/101",
+        "repository": {"full_name": m.REPO},
+        "head_repository": {"full_name": m.REPO},
+        "head_branch": m.BRANCH,
+        "event": "workflow_dispatch",
+        "workflow_id": 17,
+        "path": ".github/workflows/fork-build.yml",
+        "status": "completed",
     }
 
 
 def fill_artifacts(api, row, workflow):
     for index, target in enumerate(m.TARGETS):
-        name = "codex-gear-" + target + (".zip" if "windows" in target else ".tar.gz")
+        name = "codex-mcp-" + target + (".zip" if "windows" in target else ".tar.gz")
         payload = b"fixture bytes; never executed"
         manifest = {
             "schema": 1,
@@ -175,6 +189,60 @@ def fill_artifacts(api, row, workflow):
 
 
 class MaintenanceTests(unittest.TestCase):
+    def test_completion_waits_for_authoritative_result_and_verifies_workflow(self):
+        row = record(status="building")
+        coordinator = Harness([row])
+        completed = run(row)
+        running = dict(completed, status="in_progress", conclusion=None)
+        with (
+            patch.object(
+                coordinator.api,
+                "request",
+                side_effect=[running, completed, {"path": completed["path"]}],
+            ),
+            patch.object(coordinator, "build_result") as consume,
+            patch.object(m.time, "sleep") as sleep,
+        ):
+            m.consume_run(coordinator, "101")
+            sleep.assert_called_once_with(5)
+            consume.assert_called_once_with(completed)
+        for field, value in (
+            ("head_repository", {"full_name": "openai/codex"}),
+            ("head_sha", A),
+            ("path", ".github/workflows/unrelated.yml"),
+        ):
+            with patch.object(
+                coordinator.api,
+                "request",
+                return_value=dict(completed, **{field: value}),
+            ):
+                with self.assertRaises(RuntimeError):
+                    m.consume_run(coordinator, "101")
+        self.assertEqual(coordinator.history, [])
+
+    def test_missed_completion_is_recovered_without_owner_retry_and_stale_is_noop(self):
+        row = record(status="building")
+        coordinator = Harness([row])
+        coordinator.api.runs = [run(row)]
+        with patch.object(coordinator, "build_result") as consume:
+            coordinator.advance()
+            consume.assert_called_once_with(coordinator.api.runs[0])
+        row["request"] = "2" * 32
+        with patch.object(coordinator, "build_result") as consume:
+            m.consume_run(coordinator, "101")
+            consume.assert_not_called()
+        self.assertEqual(coordinator.history, [])
+
+    def test_completion_wait_is_bounded(self):
+        row = record(status="building")
+        coordinator = Harness([row])
+        coordinator.api.runs = [dict(run(row), status="in_progress", conclusion=None)]
+        with patch.object(m.time, "sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "still running"):
+                m.consume_run(coordinator, "101")
+            self.assertEqual(sleep.call_count, 60)
+        self.assertEqual(coordinator.history, [])
+
     def test_paginated_discovery_stable_baseline_and_order(self):
         api = m.API()
         pages = [[{"id": i} for i in range(100)], [{"id": 100}]]

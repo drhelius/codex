@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import urllib.error
 import urllib.parse
@@ -770,7 +771,7 @@ class Coordinator:
             self.publish(record, run)
         elif retry and record["status"] in ("blocked", "review"):
             self.build(record)  # Owner retry; budget is retained, never reset.
-        elif retry and record["status"] in ("building", "repairing"):
+        elif record["status"] in ("building", "repairing"):
             workflow = (
                 "fork-build.yml"
                 if record["status"] == "building"
@@ -789,12 +790,8 @@ class Coordinator:
             if matches:
                 run = matches[0]
                 if run["status"] == "completed":
-                    (
-                        self.build_result
-                        if workflow == "fork-build.yml"
-                        else self.repair_result
-                    )(run)
-            else:
+                    consume_run(self, str(run["id"]))
+            elif retry:
                 # Recover a dispatch lost after state was persisted without changing identity.
                 inputs = {
                     "release_id": str(record["id"]),
@@ -850,7 +847,7 @@ def publish_verified(coordinator, record, run):
             names = bundle.namelist()
             target = artifact["name"][5:]
             extension = ".zip" if "windows" in target else ".tar.gz"
-            name = "codex-gear-" + target + extension
+            name = "codex-mcp-" + target + extension
             require(
                 sorted(names) == sorted([name, name + ".json"]),
                 "Unexpected artifact paths",
@@ -947,10 +944,10 @@ def publish_verified(coordinator, record, run):
             {
                 "tag_name": tag,
                 "target_commitish": record["source_sha"],
-                "name": "Unofficial Codex Gear " + tag,
+                "name": "Unofficial Codex MCP " + tag,
                 "draft": True,
                 "prerelease": False,
-                "body": f"Unofficial Codex CLI with conversation-local MCP server selection.\n\nUpstream `{record['tag']}`: `{record['upstream_sha']}`\nFork: `{record['source_sha']}`\n\n[Validated build]({run['html_url']}) · [Installation and rollback](https://github.com/{REPO}/blob/{record['source_sha']}/fork/README.md)\n\nAll five targets passed. No upstream signing or notarization is claimed. Install alongside official Codex using `bin/codex-gear`.",
+                "body": f"Unofficial Codex CLI with conversation-local MCP server selection.\n\nUpstream `{record['tag']}`: `{record['upstream_sha']}`\nFork: `{record['source_sha']}`\n\n[Validated build]({run['html_url']}) · [Installation and rollback](https://github.com/{REPO}/blob/{record['source_sha']}/fork/README.md)\n\nAll five targets passed. No upstream signing or notarization is claimed. Install alongside official Codex using `bin/codex-mcp`.",
             },
         )
     existing = {
@@ -990,6 +987,47 @@ def publish_verified(coordinator, record, run):
         )
 
 
+def consume_run(coordinator, run_id):
+    require(re.fullmatch(r"[1-9][0-9]{0,19}", run_id), "Invalid workflow run ID")
+    allowed = {
+        ".github/workflows/fork-build.yml": coordinator.build_result,
+        ".github/workflows/upstream-repair.lock.yml": coordinator.repair_result,
+    }
+    # The final job explicitly dispatches this workflow before GitHub marks its
+    # parent completed. Wait for authoritative completion, never trust an input
+    # conclusion or execute an artifact. This is bounded Actions work, not a poller.
+    for attempt in range(61):
+        run = coordinator.api.request(f"repos/{REPO}/actions/runs/{run_id}")
+        require(
+            run["repository"]["full_name"] == REPO
+            and run["head_repository"]["full_name"] == REPO
+            and run["head_branch"] == BRANCH
+            and run["event"] == "workflow_dispatch"
+            and run["path"] in allowed,
+            "Untrusted workflow result",
+        )
+        pending = next_pending(coordinator.state)
+        key = "request" if run["path"].endswith("fork-build.yml") else "repair_request"
+        if not pending or not run["display_title"].endswith(
+            pending.get(key, "invalid")
+        ):
+            print("noop: obsolete workflow completion")
+            return
+        require(run["head_sha"] == pending["policy_sha"], "Unrelated workflow policy")
+        if run["status"] == "completed":
+            break
+        require(
+            attempt < 60,
+            "Workflow is still running; the daily check can recover completion",
+        )
+        time.sleep(5)
+    workflow = coordinator.api.request(
+        f"repos/{REPO}/actions/workflows/{run['workflow_id']}"
+    )
+    require(workflow["path"] == run["path"], "Workflow identity mismatch")
+    allowed[run["path"]](run)
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "coordinate"
     coordinator = Coordinator(API())
@@ -999,6 +1037,25 @@ def main():
         coordinator.discover()
         pending = next_pending(coordinator.state)
         actionable = pending and pending["status"] in ("pending", "integrated")
+        if pending and pending["status"] in ("building", "repairing"):
+            workflow = (
+                "fork-build.yml"
+                if pending["status"] == "building"
+                else "upstream-repair.lock.yml"
+            )
+            key = (
+                pending["request"]
+                if pending["status"] == "building"
+                else pending["repair_request"]
+            )
+            runs = coordinator.api.pages(
+                f"repos/{REPO}/actions/workflows/{workflow}/runs?event=workflow_dispatch&branch={BRANCH}",
+                "workflow_runs",
+            )
+            actionable = any(
+                r["status"] == "completed" and r["display_title"].endswith(key)
+                for r in runs
+            )
         print(
             json.dumps(
                 {
@@ -1063,38 +1120,21 @@ def main():
     )
     name = os.environ["GITHUB_EVENT_NAME"]
     if name == "workflow_run":
-        run = coordinator.api.request(
-            f"repos/{REPO}/actions/runs/{event['workflow_run']['id']}"
-        )
-        require(
-            run["repository"]["full_name"] == REPO
-            and run["head_repository"]["full_name"] == REPO
-            and run["head_branch"] == BRANCH
-            and run["event"] == "workflow_dispatch"
-            and run["status"] == "completed",
-            "Untrusted workflow result",
-        )
-        allowed = {
-            ".github/workflows/fork-build.yml": coordinator.build_result,
-            ".github/workflows/upstream-repair.lock.yml": coordinator.repair_result,
-        }
-        require(run["path"] in allowed, "Unexpected workflow identity")
-        workflow = coordinator.api.request(
-            f"repos/{REPO}/actions/workflows/{run['workflow_id']}"
-        )
-        require(workflow["path"] == run["path"], "Workflow identity mismatch")
-        allowed[run["path"]](run)
+        consume_run(coordinator, str(event["workflow_run"]["id"]))
     elif name == "pull_request":
         coordinator.merged(
             coordinator.api.request(f"repos/{REPO}/pulls/{event['number']}")
         )
     else:
         require(name in ("workflow_dispatch", "push"), "Unsupported event")
+        inputs = event.get("inputs") or {}
+        if inputs.get("completed_run"):
+            consume_run(coordinator, inputs["completed_run"])
+            return
         before = json.dumps(coordinator.state, sort_keys=True)
         coordinator.discover()
         if json.dumps(coordinator.state, sort_keys=True) != before:
             coordinator.save()
-        inputs = event.get("inputs") or {}
         if inputs.get("revision"):
             require(
                 event["sender"]["login"] == "drhelius",
@@ -1130,6 +1170,7 @@ def main():
                     "Manual source lost release ancestry",
                 )
             record.update(source_sha=source, reviewed=True)
+            coordinator.push(source, record["branch"])
             coordinator.save()
             coordinator.build(record)
         else:

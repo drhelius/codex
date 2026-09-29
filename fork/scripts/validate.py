@@ -96,11 +96,27 @@ def require_selector_tests(listing):
 
 
 def tests():
+    run(
+        sys.executable,
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        POLICY / "fork/tests",
+        "-p",
+        "test_install*.py",
+        "-v",
+        cwd=ROOT,
+    )
     target = build_env(native=True)
     target_args = ["--target", target] if TARGET else []
     run("cargo", "build", "--locked", *target_args, "-p", "codex-rmcp-client", "--bins")
+    # Remote transport tests launch the CLI as an exec-server. It is not a bin
+    # target of any package selected by the nextest filter below.
+    run("cargo", "build", "--locked", *target_args, "-p", "codex-cli", "--bin", "codex")
     output = RS / "target" / target / "debug" if TARGET else RS / "target/debug"
     suffix = ".exe" if os.name == "nt" else ""
+    os.environ["CARGO_BIN_EXE_codex"] = str(output / ("codex" + suffix))
     for binary in output.glob("test_*" + suffix):
         if binary.is_file() and (
             binary.suffix == ".exe" if suffix else not binary.suffix
@@ -128,6 +144,24 @@ def tests():
     os.environ["RUST_MIN_STACK"] = "8388608"
     os.environ["NEXTEST_PROFILE"] = "local"
     run("cargo", "nextest", "run", "--no-fail-fast", *test_args)
+    if os.name != "nt":
+        # A copied fork daemon must remain pinned instead of enabling the
+        # official updater. Build only this integration binary, not every CLI test.
+        run(
+            "cargo",
+            "nextest",
+            "run",
+            "--locked",
+            *target_args,
+            "-p",
+            "codex-cli",
+            "--test",
+            "app_server_daemon",
+            "-E",
+            "test(=packaged_daemon_bootstrap_seeds_local_package)",
+            "--retries",
+            "0",
+        )
 
 
 def package():
@@ -186,7 +220,7 @@ def package():
         "--package-dir",
         directory,
         "--package-version",
-        identity["tag"][6:] + "+gear." + str(identity["revision"]),
+        identity["tag"][6:],
         *prebuilt,
         cwd=ROOT,
     )
@@ -194,6 +228,7 @@ def package():
         if (ROOT / name).exists():
             shutil.copy2(ROOT / name, directory / name)
     shutil.copy2(POLICY / "fork/INSTALL.md", directory / "INSTALL.md")
+    shutil.copytree(POLICY / "fork/install", directory / "install")
     licenses = directory / "licenses"
     licenses.mkdir()
     shutil.copy2(
@@ -239,7 +274,7 @@ def package():
     # Native executable alongside the original name retains the canonical resource layout.
     shutil.copy2(
         directory / "bin" / ("codex" + suffix),
-        directory / "bin" / ("codex-gear" + suffix),
+        directory / "bin" / ("codex-mcp" + suffix),
     )
     if "apple" in target:
         for binary in (directory / "bin").iterdir():
@@ -256,7 +291,7 @@ def package():
     (directory / "fork-build.json").write_text(json.dumps(manifest, indent=2) + "\n")
     dist = ROOT / "gear-dist"
     dist.mkdir(exist_ok=True)
-    name = "codex-gear-" + target + (".zip" if spec_windows else ".tar.gz")
+    name = "codex-mcp-" + target + (".zip" if spec_windows else ".tar.gz")
     archive = dist / name
     if spec_windows:
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:

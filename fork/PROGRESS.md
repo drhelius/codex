@@ -1,5 +1,29 @@
 # Bootstrap progress
 
+## Installer follow-up
+
+- [x] Inspect upstream installers and the fork's complete distribution layout.
+- [x] Add isolated install/update scripts and the `codex-mcp` command.
+- [x] Verify installation, updates, rollback and official-Codex coexistence with fixtures.
+- [x] Include installers in release gates and document usage.
+- [x] Fix observed Actions failures: build the remote-test CLI prerequisite,
+      stabilize gh-aw schedule compilation, and explicitly dispatch completion.
+- [x] Preserve CLI/package version compatibility and prevent copied fork daemons
+      from enabling the official automatic updater.
+
+Follow-up validation: 18 CLI help/update tests and the three previously failing
+remote-MCP tests pass locally with retries disabled. The native macOS package
+passes installer/update and existing mock-MCP smoke checks. Twenty-five offline
+installer/maintenance fixtures pass; the two Windows-only fixtures remain native
+Windows release gates. PowerShell syntax was parsed locally. Both gh-aw locks
+match byte-for-byte in an origin-only Actions-style checkout with the explicit
+schedule seed. A broader CLI run initially passed 492/498 checks; all six failures
+or timeouts passed after the package compatibility fixes or reduced-concurrency
+reruns. The 70 upstream daemon tests pass with normal build settings, and the
+fork-specific daemon bootstrap check passes with official automatic updates disabled.
+Signing, push and the replacement build run are reported after
+this source checkpoint; the full platform build/publication belongs to Actions.
+
 Implementation checkpoint recorded in the bootstrap commit. Repository setup and
 the initial Actions run are reported by the bootstrap session after this commit is pushed.
 

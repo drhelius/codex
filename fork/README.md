@@ -1,10 +1,15 @@
-# Codex Gear: unofficial CLI fork
+# Codex MCP: unofficial CLI fork
 
 Public fork: <https://github.com/drhelius/codex>. Maintained branch: `fork-main`.
 The initial baseline is the stable CLI release `rust-v0.159.0`, upstream commit
 `687a119f0fcaace47e1f1abcc77cec6c813fd6da` (release ID `398926954`).
 Upstream history and license notices are retained. This fork adds conversation-local
 MCP server selection. It is not an OpenAI release.
+
+Install it as **`codex-mcp`** alongside official `codex`, using the checked-in
+[macOS/Linux installer](install/install.sh) or [Windows installer](install/install.ps1).
+Run `codex-mcp update` to update from this fork's stable releases. Complete helper
+packages and installer state stay separate from the official installation.
 
 See [selector behavior and regression contract](SELECTOR.md) and
 [installation and rollback](INSTALL.md). The bootstrap checklist is [PROGRESS.md](PROGRESS.md).
@@ -39,7 +44,11 @@ Daily Codex Upstream Maintainer (gh-aw)
             -> owner merges into candidate -> Fork Build -> promote/publish
 ```
 
-An ordinary `workflow_run` bridge handles build and repair results. Explicit
+Isolated final jobs explicitly dispatch completion from both the build and repair
+workflows. The coordinator verifies the exact run and waits up to five minutes
+for GitHub's authoritative completion status before processing its result.
+The existing `workflow_run` bridge is also idempotent, and the daily preflight
+recovers completed requests if a notification was missed. Explicit
 same-repository `workflow_dispatch` connects jobs written with `GITHUB_TOKEN`;
 the pipeline does not depend on token-generated push/PR/tag events. See
 [GitHub's documented event behavior](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
@@ -90,7 +99,7 @@ YAML do not create a separate authentication prerequisite.
 
 ```sh
 gh extension install github/gh-aw --pin v0.87.4
-gh aw compile upstream-maintainer upstream-repair --strict --no-check-update
+gh aw compile upstream-maintainer upstream-repair --strict --no-check-update --schedule-seed drhelius/codex
 python3 fork/scripts/tools.py /tmp/codex-gear-tools
 python3 fork/scripts/check_policy.py /tmp/codex-gear-tools
 ```
@@ -101,6 +110,8 @@ consistency, ordinary workflow lint and offline lifecycle fixtures are mandatory
 release gates. Scheduled/dispatch agent conditions were inspected for this fork;
 no generated security or fork guard was removed. Fork Repair uses dispatch rather
 than the compiler's fork-restricted `workflow_run` agent trigger.
+The explicit schedule seed keeps the daily cron identical in local checkouts
+with an `upstream` remote and Actions checkouts with only `origin`.
 
 ## Validation, releases and recovery
 
@@ -110,6 +121,12 @@ dependencies and builds on standard hosted runners for macOS ARM64/x86_64,
 Linux ARM64/x86_64 (musl) and Windows x86_64. Each target runs deterministic
 selector gates and existing MCP tests, builds the CLI and helper binaries, then
 smoke-tests an extracted archive with a local MCP server and local model endpoint.
+Native installer fixtures cover updates, rollback, failed integrity checks and
+official-Codex coexistence; an extracted CLI also exercises its real update command
+against local release fixtures. Keep these gates and bundled installers across integrations.
+The CLI and package retain matching upstream versions for daemon compatibility;
+fork identity lives in help output and release provenance. Native Unix gates also
+verify that a daemon copied from the fork cannot enable official automatic updates.
 No desktop application, real model or paid inference is needed by those tests.
 Cargo source caches are used only by unprivileged build jobs. Privileged jobs
 restore no build cache and execute no candidate binaries/scripts.

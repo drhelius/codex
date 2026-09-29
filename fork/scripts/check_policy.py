@@ -25,6 +25,8 @@ def main():
             "upstream-repair",
             "--strict",
             "--no-check-update",
+            "--schedule-seed",
+            "drhelius/codex",
         ],
         cwd=ROOT,
         check=True,

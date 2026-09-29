@@ -93,7 +93,7 @@ try {
     }
     $version = ($tag -replace '^mcp-rust-v', '') -replace '-r\d+$', ''
     $reported = & (Join-Path $package 'bin/codex-mcp.exe') --version
-    if ($LASTEXITCODE -ne 0 -or $reported -cne "codex-cli $version+gear") { throw 'Unexpected fork executable version.' }
+    if ($LASTEXITCODE -ne 0 -or $reported -cne "codex-cli $version") { throw 'Unexpected fork executable version.' }
     $utf8 = New-Object Text.UTF8Encoding($false)
     [IO.File]::WriteAllText((Join-Path $package '.codex-mcp-bin-dir'), "$binDir`n", $utf8)
     [IO.File]::WriteAllText((Join-Path $package '.archive-sha256'), "$digest`n", $utf8)
@@ -107,7 +107,7 @@ try {
             throw "Refusing to overwrite $destination"
         }
         $reported = & (Join-Path $destination 'bin/codex-mcp.exe') --version
-        if ($LASTEXITCODE -ne 0 -or $reported -cne "codex-cli $version+gear") { throw 'Existing release is damaged; move it aside before reinstalling.' }
+        if ($LASTEXITCODE -ne 0 -or $reported -cne "codex-cli $version") { throw 'Existing release is damaged; move it aside before reinstalling.' }
     } else { [IO.Directory]::Move($package, $destination) }
     # A stable ASCII launcher resolves its own Unicode directory via %~dp0.
     # Only the version pointer changes during updates, including self-updates.

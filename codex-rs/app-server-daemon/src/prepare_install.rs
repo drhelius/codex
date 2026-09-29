@@ -266,7 +266,10 @@ async fn prepare_from_package(
     }
     let standalone = home.join("packages/standalone");
     let canonical_source = source.canonicalize()?;
-    let follows_latest = mode == InstallMode::Missing
+    // Fork packages are updated explicitly by their own installer. A daemon
+    // copied from one must never opt into the official release updater.
+    let follows_latest = option_env!("CODEX_GEAR_FORK").is_none()
+        && mode == InstallMode::Missing
         && stable
         && (standalone.join("current").canonicalize().ok().as_deref()
             != Some(canonical_source.as_path())

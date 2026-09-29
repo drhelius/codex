@@ -96,7 +96,7 @@ shutil.copyfile(source, args[args.index('--output') + 1])
             "codex-resources/bwrap",
             "codex-resources/zsh/bin/zsh",
         ):
-            files[name] = f'#!/bin/sh\necho "codex-cli {version}+gear"\n'.encode()
+            files[name] = f'#!/bin/sh\necho "codex-cli {version}"\n'.encode()
         for name in ("install.sh", "install.ps1"):
             files["install/" + name] = (INSTALL / name).read_bytes()
         files.pop(missing, None)
@@ -210,7 +210,7 @@ shutil.copyfile(source, args[args.index('--output') + 1])
             env=self.env,
             text=True,
         )
-        self.assertEqual(result, "codex-cli 0.159.0+gear\nofficial-codex\n")
+        self.assertEqual(result, "codex-cli 0.159.0\nofficial-codex\n")
 
 
 if __name__ == "__main__":

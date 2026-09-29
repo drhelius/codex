@@ -42,7 +42,7 @@ class WindowsInstallTest(unittest.TestCase):
                 POWERSHELL,
                 "-NoProfile",
                 "-Command",
-                "Add-Type -TypeDefinition 'public class Fixture { public static void Main() { System.Console.WriteLine(\"codex-cli 0.159.0+gear\"); } }' "
+                "Add-Type -TypeDefinition 'public class Fixture { public static void Main() { System.Console.WriteLine(\"codex-cli 0.159.0\"); } }' "
                 '-OutputAssembly (Join-Path $env:MOCK_RELEASES "fixture.exe") -OutputType ConsoleApplication',
             ],
             env=self.env,
@@ -147,7 +147,7 @@ function Invoke-WebRequest {
             ["cmd.exe", "/d", "/c", str(self.bin / "codex-mcp.cmd"), "--version"],
             text=True,
         )
-        self.assertEqual(result.strip(), "codex-cli 0.159.0+gear")
+        self.assertEqual(result.strip(), "codex-cli 0.159.0")
         self.run_install()
         self.assertEqual((self.bin / "codex-mcp.version").read_bytes(), initial)
         self.release(2)

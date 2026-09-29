@@ -233,7 +233,7 @@ for file in codex-package.json fork-build.json LICENSE install/install.sh instal
 done
 version="${tag#mcp-rust-v}"
 version="${version%-r*}"
-[ "$("$package/bin/codex-mcp" --version)" = "codex-cli $version+gear" ] || fail 'Unexpected fork executable version'
+[ "$("$package/bin/codex-mcp" --version)" = "codex-cli $version" ] || fail 'Unexpected fork executable version'
 printf '%s\n' "$bin_dir" > "$package/.codex-mcp-bin-dir"
 printf '%s\n' "$digest" > "$package/.archive-sha256"
 mkdir -p "$root/releases"
@@ -242,7 +242,7 @@ if [ -e "$destination" ] || [ -L "$destination" ]; then
   [ ! -L "$destination" ] && [ -f "$destination/.archive-sha256" ] &&
     [ "$(cat "$destination/.archive-sha256")" = "$digest" ] &&
     [ "$(cat "$destination/.codex-mcp-bin-dir")" = "$bin_dir" ] || fail "Refusing to overwrite $destination"
-  [ "$("$destination/bin/codex-mcp" --version)" = "codex-cli $version+gear" ] || fail 'Existing release is damaged; move it aside before reinstalling'
+  [ "$("$destination/bin/codex-mcp" --version)" = "codex-cli $version" ] || fail 'Existing release is damaged; move it aside before reinstalling'
 else
   mv "$package" "$destination"
 fi

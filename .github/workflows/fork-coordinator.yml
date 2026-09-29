@@ -2,6 +2,9 @@ name: Fork Coordinator
 on:
   workflow_dispatch:
     inputs:
+      completed_run:
+        description: Internal completion notification; validated against the durable request
+        type: string
       retry:
         description: Owner retry of pending work, retaining the repair budget
         type: boolean

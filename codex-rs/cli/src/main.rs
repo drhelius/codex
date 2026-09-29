@@ -64,6 +64,7 @@ mod exec_server_args_tests;
 mod exec_server_auth;
 mod exec_server_command;
 mod exec_server_telemetry;
+mod fork_update;
 mod marketplace_cmd;
 mod mcp_cmd;
 mod mcp_login;
@@ -113,15 +114,15 @@ use codex_terminal_detection::TerminalName;
 #[derive(Debug, Parser)]
 #[clap(
     author,
-    version = concat!(env!("CARGO_PKG_VERSION"), "+gear"),
-    after_help = "Unofficial DrHelius fork with MCP server selection (codex-gear).",
+    version,
+    after_help = "Unofficial DrHelius fork with MCP server selection (codex-mcp).",
     // If a sub‑command is given, ignore requirements of the default args.
     subcommand_negates_reqs = true,
     // The executable is sometimes invoked via a platform‑specific name like
     // `codex-x86_64-unknown-linux-musl`, but the help output should always use
-    // the generic `codex` command name that users run.
-    bin_name = "codex",
-    override_usage = "codex [OPTIONS] [PROMPT]\n       codex [OPTIONS] <COMMAND> [ARGS]"
+    // the `codex-mcp` command name that fork users run.
+    bin_name = "codex-mcp",
+    override_usage = "codex-mcp [OPTIONS] [PROMPT]\n       codex-mcp [OPTIONS] <COMMAND> [ARGS]"
 )]
 struct MultitoolCli {
     #[clap(flatten)]
@@ -1616,15 +1617,16 @@ async fn cli_main(
             print_completion(completion_cli);
         }
         Some(Subcommand::Update) => {
-            if option_env!("CODEX_GEAR_FORK").is_some() {
-                anyhow::bail!("Update codex-gear from https://github.com/drhelius/codex/releases");
-            }
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
                 root_remote_auth_token_env.as_deref(),
                 "update",
             )?;
-            run_update_command()?;
+            if option_env!("CODEX_GEAR_FORK").is_some() {
+                fork_update::run()?;
+            } else {
+                run_update_command()?;
+            }
         }
         Some(Subcommand::Doctor(doctor_cli)) => {
             reject_remote_mode_for_subcommand(
@@ -2695,7 +2697,7 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
 
 fn print_completion(cmd: CompletionCommand) {
     let mut app = MultitoolCli::command();
-    let name = "codex";
+    let name = "codex-mcp";
     generate(cmd.shell, &mut app, name, &mut std::io::stdout());
 }
 
@@ -3428,15 +3430,15 @@ mod tests {
     fn plugin_marketplace_help_uses_plugin_namespace() {
         let help = help_from_args(&["codex", "plugin", "marketplace", "--help"]);
         assert!(
-            help.contains("Usage: codex plugin marketplace [OPTIONS] <COMMAND>"),
+            help.contains("Usage: codex-mcp plugin marketplace [OPTIONS] <COMMAND>"),
             "{help}"
         );
 
         for (subcommand, usage) in [
-            ("add", "Usage: codex plugin marketplace add"),
-            ("list", "Usage: codex plugin marketplace list"),
-            ("upgrade", "Usage: codex plugin marketplace upgrade"),
-            ("remove", "Usage: codex plugin marketplace remove"),
+            ("add", "Usage: codex-mcp plugin marketplace add"),
+            ("list", "Usage: codex-mcp plugin marketplace list"),
+            ("upgrade", "Usage: codex-mcp plugin marketplace upgrade"),
+            ("remove", "Usage: codex-mcp plugin marketplace remove"),
         ] {
             let help = help_from_args(&["codex", "plugin", "marketplace", subcommand, "--help"]);
             assert!(help.contains(usage), "{help}");
