@@ -3,6 +3,7 @@
 
 import base64
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -104,11 +105,28 @@ class API:
                 ) as response:
                     result = response.read()
                 return result if binary else (json.loads(result) if result else None)
-            except urllib.error.HTTPError as error:
+            except (
+                urllib.error.HTTPError,
+                http.client.IncompleteRead,
+                ConnectionError,
+                TimeoutError,
+            ) as error:
                 # A failed write can already have taken effect. Retry only reads.
-                if method != "GET" or error.code not in (502, 503, 504) or attempt == 2:
+                if (
+                    method != "GET"
+                    or attempt == 2
+                    or (
+                        isinstance(error, urllib.error.HTTPError)
+                        and error.code not in (502, 503, 504)
+                    )
+                ):
                     raise
-                print(f"Retrying GitHub read after HTTP {error.code}", file=sys.stderr)
+                reason = (
+                    f"HTTP {error.code}"
+                    if isinstance(error, urllib.error.HTTPError)
+                    else type(error).__name__
+                )
+                print(f"Retrying GitHub read after {reason}", file=sys.stderr)
                 time.sleep(2**attempt)
 
     def optional(self, path):
@@ -119,15 +137,15 @@ class API:
                 return None
             raise
 
-    def pages(self, path, key=None):
+    def pages(self, path, key=None, *, per_page=100):
         result = []
         for page in range(1, 1001):
             data = self.request(
-                f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}"
+                f"{path}{'&' if '?' in path else '?'}per_page={per_page}&page={page}"
             )
             rows = data[key] if key else data
             result.extend(rows)
-            if len(rows) < 100:
+            if len(rows) < per_page:
                 return result
         raise RuntimeError("Pagination limit reached; refusing incomplete discovery")
 
@@ -276,7 +294,11 @@ class Coordinator:
 
     def discover(self):
         known = {r["id"]: r for r in self.state["releases"]}
-        for release in eligible(self.api.pages(f"repos/{UPSTREAM}/releases")):
+        # Release responses include every asset; 100 Codex releases exceed 25 MB.
+        # Keep pages small, but exhaust pagination so no eligible GA is skipped.
+        for release in eligible(
+            self.api.pages(f"repos/{UPSTREAM}/releases", per_page=20)
+        ):
             if release["id"] in known:
                 require(
                     known[release["id"]]["tag"] == release["tag_name"],

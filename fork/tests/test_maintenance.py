@@ -99,7 +99,7 @@ class FakeAPI:
             return self.release
         return None
 
-    def pages(self, path, key=None):
+    def pages(self, path, key=None, *, per_page=100):
         if "/runs?event=workflow_dispatch" in path:
             return self.runs
         if path.endswith("/releases"):
@@ -217,6 +217,50 @@ class MaintenanceTests(unittest.TestCase):
                     m.API().request("fixture", method=method)
                 self.assertEqual(opener.return_value.open.call_count, attempts)
 
+    def test_interrupted_github_response_is_replaced_by_a_complete_read(self):
+        for error in (
+            m.http.client.IncompleteRead(b'{"id":', 26_984_539),
+            ConnectionResetError("Connection reset by peer"),
+            TimeoutError("Read timed out"),
+        ):
+            with (
+                self.subTest(error=type(error).__name__),
+                patch.object(m.urllib.request, "build_opener") as opener,
+                patch.object(m.time, "sleep") as sleep,
+            ):
+                response = opener.return_value.open.return_value.__enter__.return_value
+                response.read.side_effect = [error, b'{"id": 42}']
+                self.assertEqual(m.API().request("fixture"), {"id": 42})
+                self.assertEqual(opener.return_value.open.call_count, 2)
+                sleep.assert_called_once_with(1)
+
+    def test_interrupted_reads_are_bounded_and_uncertain_writes_are_not_repeated(self):
+        for method, attempts in (("GET", 3), ("POST", 1), ("PATCH", 1), ("PUT", 1)):
+            with (
+                self.subTest(method=method),
+                patch.object(m.urllib.request, "build_opener") as opener,
+                patch.object(m.time, "sleep") as sleep,
+            ):
+                response = opener.return_value.open.return_value.__enter__.return_value
+                response.read.side_effect = m.http.client.IncompleteRead(b"", 100)
+                with self.assertRaises(m.http.client.IncompleteRead):
+                    m.API().request("fixture", method=method)
+                self.assertEqual(opener.return_value.open.call_count, attempts)
+                self.assertEqual(sleep.call_count, attempts - 1)
+
+    def test_permission_failure_is_not_retried(self):
+        with (
+            patch.object(m.urllib.request, "build_opener") as opener,
+            patch.object(m.time, "sleep") as sleep,
+        ):
+            opener.return_value.open.side_effect = m.urllib.error.HTTPError(
+                "https://api.github.com/fixture", 403, "Forbidden", {}, None
+            )
+            with self.assertRaises(m.urllib.error.HTTPError):
+                m.API().request("fixture")
+            self.assertEqual(opener.return_value.open.call_count, 1)
+            sleep.assert_not_called()
+
     def test_completion_waits_for_authoritative_result_and_verifies_workflow(self):
         row = record(status="building")
         coordinator = Harness([row])
@@ -273,10 +317,23 @@ class MaintenanceTests(unittest.TestCase):
 
     def test_paginated_discovery_stable_baseline_and_order(self):
         api = m.API()
-        pages = [[{"id": i} for i in range(100)], [{"id": 100}]]
-        with patch.object(api, "request", side_effect=pages) as query:
-            self.assertEqual(len(api.pages("repos/openai/codex/releases")), 101)
-            self.assertIn("page=2", query.call_args[0][0])
+        for page_size in (20, 100):
+            rows = [{"id": i} for i in range(page_size + 1)]
+            pages = [rows[:page_size], rows[page_size:]]
+            with (
+                self.subTest(page_size=page_size),
+                patch.object(api, "request", side_effect=pages) as query,
+            ):
+                self.assertEqual(
+                    api.pages("repos/openai/codex/releases", per_page=page_size), rows
+                )
+                self.assertEqual(
+                    [call.args[0] for call in query.call_args_list],
+                    [
+                        f"repos/openai/codex/releases?per_page={page_size}&page=1",
+                        f"repos/openai/codex/releases?per_page={page_size}&page=2",
+                    ],
+                )
         fixture = [
             {
                 "id": 2,
@@ -295,6 +352,7 @@ class MaintenanceTests(unittest.TestCase):
         ]
         excluded = [
             dict(fixture[0], tag_name="rust-v0.161.0-alpha.1", prerelease=True),
+            dict(fixture[0], tag_name="rust-v0.161.0-rc.1", prerelease=False),
             dict(fixture[0], tag_name="desktop-v2.0.0"),
             dict(fixture[0], draft=True),
         ]
