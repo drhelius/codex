@@ -677,11 +677,15 @@ class Coordinator:
                 for s in j.get("steps", [])
                 if s.get("conclusion") == "failure"
             ]
-            if not failed or any(
-                not name.startswith(
-                    ("Selector gates", "Build and smoke", "Verify candidate")
+            if (
+                run["conclusion"] != "failure"
+                or not failed
+                or any(
+                    not name.startswith(
+                        ("Selector gates", "Build and smoke", "Verify candidate")
+                    )
+                    for name in failed
                 )
-                for name in failed
             ):
                 record["status"] = "blocked"
                 self.save()

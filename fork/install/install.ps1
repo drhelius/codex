@@ -122,7 +122,9 @@ exit /b %errorlevel%
     $stagedSelection = Join-Path $binDir ('.codex-mcp.' + [Guid]::NewGuid().ToString('N'))
     [IO.File]::WriteAllText($stagedSelection, "$tag-$target`r`n", [Text.Encoding]::ASCII)
     try {
-        if (Test-Path $selectionPath) { [IO.File]::Replace($stagedSelection, $selectionPath, $null) }
+        # Windows PowerShell 5.1 converts a null String argument to an empty
+        # path. Keep the atomic replacement and use a real temporary backup.
+        if (Test-Path $selectionPath) { [IO.File]::Replace($stagedSelection, $selectionPath, (Join-Path $temporary 'previous-version')) }
         else { [IO.File]::Move($stagedSelection, $selectionPath) }
     } finally { if (Test-Path $stagedSelection) { Remove-Item $stagedSelection } }
     if (-not (Test-Path $commandPath)) {

@@ -115,10 +115,12 @@ with an `upstream` remote and Actions checkouts with only `origin`.
 
 ## Validation, releases and recovery
 
-`fork-build.yml` runs without repository-write/publication credentials. It checks
-trusted policy, installs the release's exact Rust toolchain, uses locked Cargo
+`fork-build.yml` runs without repository-write/publication credentials. Fast policy
+and native macOS/Linux/Windows installer checks must pass before the Rust matrix
+starts. It installs the release's exact Rust toolchain, uses locked Cargo
 dependencies and builds on standard hosted runners for macOS ARM64/x86_64,
-Linux ARM64/x86_64 (musl) and Windows x86_64. Each target runs deterministic
+Linux ARM64/x86_64 (musl) and Windows x86_64. A failed target cancels the remaining
+matrix work; publication still requires all five targets to succeed. Each target runs deterministic
 selector gates and existing MCP tests, builds the CLI and helper binaries, then
 smoke-tests an extracted archive with a local MCP server and local model endpoint.
 Native installer fixtures cover updates, rollback, failed integrity checks and
@@ -128,7 +130,11 @@ The CLI and package retain matching upstream versions for daemon compatibility;
 fork identity lives in help output and release provenance. Native Unix gates also
 verify that a daemon copied from the fork cannot enable official automatic updates.
 No desktop application, real model or paid inference is needed by those tests.
-Cargo source caches are used only by unprivileged build jobs. Privileged jobs
+Pinned official `just` and `cargo-nextest` binaries are SHA-256 verified instead
+of compiled from source on every runner. Cargo downloads are cached before
+release compilation, including after a test failure; a cold Rust build still
+compiles both test and optimized release profiles. Cargo source caches are used
+only by unprivileged build jobs. Privileged jobs
 restore no build cache and execute no candidate binaries/scripts.
 
 The package uses upstream's supported resource layout and checksum-verified

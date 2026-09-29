@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   notify:
-    needs: [policy, build]
+    needs: [policy, installers, build]
     if: always() && github.repository == 'drhelius/codex' && github.ref == 'refs/heads/fork-main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -53,10 +53,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 fork/scripts/check_policy.py "$RUNNER_TEMP/fork-tools"
-  build:
+  installers:
     if: github.repository == 'drhelius/codex' && github.ref == 'refs/heads/fork-main'
     strategy:
       fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Native installer lifecycle and integrity fixtures
+        run: python -m unittest discover -s fork/tests -p "test_install*.py" -v
+  build:
+    needs: [policy, installers]
+    if: github.repository == 'drhelius/codex' && github.ref == 'refs/heads/fork-main'
+    strategy:
+      fail-fast: true
       matrix:
         include:
           - {runner: macos-15, target: aarch64-apple-darwin}
@@ -104,7 +122,8 @@ jobs:
           cd source
           python -c 'import os,sys; sys.path.insert(0,"../policy/fork/scripts"); from maintenance import verify_boundary; verify_boundary(os.environ["SOURCE_SHA"],os.environ["POLICY_SHA"])'
           cp ../identity.json identity.json
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cargo-sources
         with:
           path: |
             ~/.cargo/registry
@@ -122,9 +141,18 @@ jobs:
           cd source
           python ../policy/fork/scripts/validate.py setup
       - name: Selector gates and existing MCP regressions
+        id: tests
         run: |
           cd source
           python ../policy/fork/scripts/validate.py tests
+      - name: Preserve Cargo downloads even when tests fail
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && steps.cargo-sources.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ steps.cargo-sources.outputs.cache-primary-key }}
       - name: Build and smoke extracted distribution
         run: |
           cd source

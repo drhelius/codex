@@ -1,5 +1,21 @@
 # Bootstrap progress
 
+## Build reliability follow-up
+
+- [x] Diagnose the native Windows update failure and cold tool-setup delay from Actions logs.
+- [x] Preserve atomic installer updates with a valid PowerShell backup path.
+- [x] Gate the Rust matrix on fast native installer and policy checks.
+- [x] Verify pinned prebuilt test tools for every supported runner; preserve dependency downloads after failed tests.
+- [x] Keep cancelled and installer-policy failures outside the Copilot repair budget.
+- [x] Run local script, PowerShell, workflow and compiler-consistency checks.
+- [ ] Sign and push; supersede the obsolete build and hand the new run to Actions.
+
+Local checks: 28 offline fixtures pass; the two native Windows fixtures remain
+required in Actions. Both gh-aw definitions compile with no warnings and unchanged
+locks. All nine pinned tool archives pass checksum/extraction checks for the five
+runner architectures; native macOS tools start successfully. PowerShell 7 parses
+the installer and passes atomic replacement, pending the native PowerShell 5.1 gate.
+
 ## Installer follow-up
 
 - [x] Inspect upstream installers and the fork's complete distribution layout.

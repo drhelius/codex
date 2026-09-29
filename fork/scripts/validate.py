@@ -46,8 +46,18 @@ def setup():
     )
     if TARGET:
         run("rustup", "target", "add", "--toolchain", toolchain, TARGET)
-    for package, version in (("just", "1.58.0"), ("cargo-nextest", "0.9.146")):
-        run("cargo", "install", "--locked", "--version", version, package)
+    from tools import install
+
+    directory = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin"
+    if os.environ.get("RUNNER_TEMP"):
+        directory = Path(os.environ["RUNNER_TEMP"]) / "fork-test-tools"
+    install(directory, ("just", "cargo-nextest"))
+    os.environ["PATH"] = str(directory) + os.pathsep + os.environ["PATH"]
+    if os.environ.get("GITHUB_PATH"):
+        with open(os.environ["GITHUB_PATH"], "a", encoding="utf-8") as paths:
+            paths.write(str(directory) + "\n")
+    run("just", "--version")
+    run("cargo", "nextest", "--version")
 
 
 def build_env(native=False):

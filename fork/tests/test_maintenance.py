@@ -329,6 +329,27 @@ class MaintenanceTests(unittest.TestCase):
             coordinator.api.calls[-1][0].endswith("upstream-repair.lock.yml/dispatches")
         )
 
+    def test_cancelled_and_installer_failures_do_not_consume_repair_budget(self):
+        for conclusion, step in (
+            ("cancelled", "Selector gates and existing MCP regressions"),
+            ("failure", "Native installer lifecycle and integrity fixtures"),
+        ):
+            with self.subTest(conclusion=conclusion, step=step):
+                row = record(status="building")
+                coordinator = Harness([row])
+                workflow = run(row, success=False)
+                workflow["conclusion"] = conclusion
+                jobs = [{"steps": [{"name": step, "conclusion": "failure"}]}]
+                with patch.object(coordinator.api, "pages", return_value=jobs):
+                    coordinator.build_result(workflow)
+                self.assertEqual((row["status"], row["attempts"]), ("blocked", 0))
+                self.assertFalse(
+                    any(
+                        path.endswith("/dispatches")
+                        for path, _, _ in coordinator.api.calls
+                    )
+                )
+
     def test_repaired_candidate_waits_for_owner_and_old_runs_are_ignored(self):
         row = record(status="building")
         row["pr"] = 21
