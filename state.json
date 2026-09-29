@@ -13,11 +13,11 @@
       "attempts": 0,
       "pr": null,
       "base_sha": "ff98a8e255b0313b0c7820b6340916fbc141c7d7",
-      "policy_sha": "6c4198656de5efa7ff7e89c95e367986d93fdeb4",
+      "policy_sha": "b6025696b5705a92d6e2555f9ab46d88fcb16578",
       "source_sha": "b6025696b5705a92d6e2555f9ab46d88fcb16578",
       "integration_sha": "ff98a8e255b0313b0c7820b6340916fbc141c7d7",
       "conflicts": "",
-      "request": "934fd45da34c4b45b9a55004923fbe66",
+      "request": "ee518148d7794031840da7467b09e689",
       "build_run": 36570627652,
       "issue": 1,
       "reviewed": true
