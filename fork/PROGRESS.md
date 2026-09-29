@@ -1,5 +1,14 @@
 # Bootstrap progress
 
+## Manifest repair follow-up
+
+- [x] Permit focused Cargo manifest and lockfile repairs through PR safe outputs, with owner review.
+- [x] Retry blocked conflicts with current fork policy, preserving candidate history, existing work and the repair budget.
+- [x] Verify interrupted-push recovery, 36 passing offline fixtures (two Windows-only skips), and 56 checks using gh-aw's actual file-protection handlers.
+- [x] Compile both gh-aw definitions without warnings and validate ordinary workflows.
+
+The pending release stays in Actions; a repair PR must pass independent gates and owner review before publication.
+
 ## Build performance follow-up
 
 - [x] Inspect live build steps and distinguish compilation from test execution.

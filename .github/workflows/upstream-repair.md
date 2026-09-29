@@ -95,13 +95,25 @@ safe-outputs:
     auto-close-issue: false
     max-patch-files: 60
     max-patch-size: 1024
-    allowed-files: ['codex-rs/**/src/**/*.rs']
+    allowed-files:
+      - 'codex-rs/**/src/*.rs'
+      - 'codex-rs/**/src/**/*.rs'
+      - 'codex-rs/Cargo.toml'
+      - 'codex-rs/**/Cargo.toml'
+      - 'codex-rs/Cargo.lock'
+      - 'MODULE.bazel.lock'
   push-to-pull-request-branch:
     target: '*'
     required-title-prefix: 'MCP repair: ${{ inputs.release_id }} '
     required-labels: [fork-repair]
     max: 1
-    allowed-files: ['codex-rs/**/src/**/*.rs']
+    allowed-files:
+      - 'codex-rs/**/src/*.rs'
+      - 'codex-rs/**/src/**/*.rs'
+      - 'codex-rs/Cargo.toml'
+      - 'codex-rs/**/Cargo.toml'
+      - 'codex-rs/Cargo.lock'
+      - 'MODULE.bazel.lock'
   update-pull-request:
     target: '*'
     required-title-prefix: 'MCP repair: ${{ inputs.release_id }} '
@@ -133,15 +145,27 @@ re-merge, rebase, squash that baseline, edit state, or change workflow policy.
    selector gates using mock servers and a mocked model, without paid inference.
    If tooling is absent, run `python3 fork/scripts/validate.py setup` first.
    Run additional relevant existing tests and formatting for changed crates.
-4. Make the smallest correct Rust source repair. Preserve passive selection and
+4. Make the smallest correct Rust source or Cargo manifest repair. Preserve passive selection and
    status, complete-turn snapshots, initialization/discovery before inference,
    incremental retained processes, dispatch enforcement, remote MCP, child
    restrictions, required/admin policy, approvals, sandboxing, auth, filters and
    cleanup. Never delete/disable tests, weaken assertions, remove the selector,
    relax sandboxing, reduce targets or mark failing checks successful. Do not
-   edit test files, snapshots, manifests, lock files, maintainer instructions,
-   credentials, build scripts, automation or release policy. If these must
-   change, report the exact review-needed limitation via `noop`.
+   edit test files, snapshots, maintainer instructions, credentials, build scripts,
+   automation or release policy. If these must change, report the exact
+   review-needed limitation via `noop`.
+   Cargo manifests, `codex-rs/Cargo.lock` and `MODULE.bazel.lock` may change only
+   as required to integrate this exact stable upstream release. For a workspace
+   version conflict, use the version in the immutable upstream tag's manifest
+   and synchronize local package versions in Cargo.lock; preserve external
+   dependency versions and checksums unless compatibility requires an explicit
+   dependency repair. Regenerate lockfiles with the declared toolchain, including
+   `just bazel-lock-update` when Cargo dependencies change. Do not change build
+   profiles, remove targets/features, disable tests, or weaken security to pass CI.
+   Explain every dependency change in the PR for owner review. A permitted
+   manifest conflict is actionable work, not a reason for `noop`. If a local
+   check is unavailable, report it accurately in the PR and leave independent
+   release gates mandatory; never claim an unrun check passed.
 5. Reuse the one existing PR recorded in the ledger. For a first repair, use
    native `create_pull_request` targeting the exact candidate branch in
    `drhelius/codex`, with head `fork-repair/<release_id>-r<revision>`. This is a

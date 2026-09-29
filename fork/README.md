@@ -73,9 +73,13 @@ the dedicated selector regression files, their snapshot and the mock stdio serve
 the maintained base, then independently checks them at build and publication.
 All inherited executable workflows are archived as `fork/upstream-workflows/*.disabled`.
 New upstream workflows cannot silently become active. The agent cannot edit
-policy, tests, dependencies, credentials or release gates through its allowed
-Rust-source safe outputs. Necessary policy/test/dependency adaptations require
-owner review. Large mechanical merges never pass through the agent's patch
+policy, tests, credentials or release gates through its safe outputs. The allowlist
+permits Rust source, Cargo manifests, the workspace Cargo lockfile and the Bazel
+lockfile. Manifest and dependency repairs must be limited to compatibility with
+the exact upstream release, explained in the PR, and reviewed by the owner;
+they cannot change build profiles, remove targets/features or weaken tests/security.
+Necessary policy/test adaptations still require a separate owner change.
+Large mechanical merges never pass through the agent's patch
 transport or its bounded 60-file/1-MiB create-PR allowance.
 
 Upstream release tags currently leave path-package versions at `0.0.0` in
@@ -168,7 +172,12 @@ the last good release intact and the ledger pending.
 
 Use **Fork Coordinator → Run workflow → retry=true** after resolving an external
 failure or to recover a missed dispatch/publication. The same request, release
-identity and budget are reused as appropriate. Artifacts remain for 30 days;
+identity and budget are reused as appropriate. For a blocked merge conflict with
+no repair PR or candidate edits, an owner retry refreshes the integration against
+current `fork-main` policy and invokes repair directly, without building known
+conflict markers. The previous candidate remains an additional parent; no branch
+is force-pushed and the repair budget is not reset. Existing PRs or unexpected
+candidate changes prevent this refresh. Artifacts remain for 30 days;
 expired artifacts require a new validated build/revision. For a corrected build
 of a published release, explicitly supply its `release_id` and the next
 `revision` with an empty backlog. The same explicit revision operation can recover

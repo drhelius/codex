@@ -418,6 +418,48 @@ class MaintenanceTests(unittest.TestCase):
             coordinator.api.calls[-1][0].endswith("upstream-repair.lock.yml/dispatches")
         )
 
+    def test_owner_retry_refreshes_conflicts_without_building_them(self):
+        row = record(status="blocked")
+        row.update(conflicts="codex-rs/Cargo.toml", attempts=1)
+        coordinator = Harness([row])
+        with (
+            patch.object(coordinator, "integrate") as integrate,
+            patch.object(coordinator, "build") as build,
+        ):
+            coordinator.advance()
+            integrate.assert_not_called()
+            coordinator.advance(retry=True)
+            integrate.assert_called_once_with(row, retry_conflicts=True)
+            build.assert_not_called()
+        self.assertEqual(row["attempts"], 1)
+        row["status"] = "integrated"
+        coordinator.advance()
+        self.assertEqual((row["status"], row["attempts"]), ("repairing", 2))
+        self.assertTrue(
+            coordinator.api.calls[-1][0].endswith("upstream-repair.lock.yml/dispatches")
+        )
+
+    def test_conflict_refresh_preserves_existing_work_and_repair_budget(self):
+        original = record(status="blocked")
+        original.update(conflicts="codex-rs/Cargo.toml", attempts=1)
+        for changes in (
+            {"pr": 42},
+            {"source_sha": A},
+            {"attempts": 3},
+            {"status": "repairing"},
+            {"conflicts": ""},
+        ):
+            row = dict(original, **changes)
+            coordinator = Harness([row])
+            with self.subTest(changes=changes), self.assertRaises(RuntimeError):
+                m.Coordinator.integrate(coordinator, row, retry_conflicts=True)
+            self.assertEqual(coordinator.history, [])
+        coordinator = Harness([original])
+        coordinator.api.prs = [{"number": 42}]
+        with self.assertRaisesRegex(RuntimeError, "existing candidate PR"):
+            m.Coordinator.integrate(coordinator, original, retry_conflicts=True)
+        self.assertEqual(coordinator.history, [])
+
     def test_cancelled_and_installer_failures_do_not_consume_repair_budget(self):
         for conclusion, step in (
             ("cancelled", "Selector gates and existing MCP regressions"),
@@ -651,6 +693,141 @@ class MaintenanceTests(unittest.TestCase):
                 )
                 self.assertEqual(row["status"], "repairing" if conflict else "building")
                 self.assertEqual(row["attempts"], int(conflict))
+
+    def test_manifest_conflict_retry_uses_current_policy_and_recovers_interrupted_push(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as directory, chdir(directory):
+            real_git = m.git
+            real_git("init", "-q")
+            real_git("config", "commit.gpgsign", "false")
+            real_git("config", "user.name", "Fixture")
+            real_git("config", "user.email", "fixture@example.invalid")
+            Path("codex-rs").mkdir()
+            Path(".github").mkdir()
+            manifest = Path("codex-rs/Cargo.toml")
+            manifest.write_text('[workspace.package]\nversion = "0.0.0"\n')
+            Path("codex-rs/Cargo.lock").write_text(
+                'version = 4\n[[package]]\nname = "local"\nversion = "0.0.0"\n'
+            )
+            Path(".github/policy").write_text("upstream")
+            real_git("add", ".")
+            real_git("commit", "-qm", "baseline")
+            baseline = real_git("rev-parse", "HEAD")
+            manifest.write_text('[workspace.package]\nversion = "0.159.0"\n')
+            Path(".github/policy").write_text("old fork policy")
+            real_git("commit", "-am", "fork")
+            fork = real_git("rev-parse", "HEAD")
+            real_git("checkout", "-q", "--detach", baseline)
+            manifest.write_text('[workspace.package]\nversion = "0.159.1"\n')
+            real_git("commit", "-am", "stable upstream release")
+            upstream = real_git("rev-parse", "HEAD")
+            row = record(m.BOOT["release_id"] + 1)
+            row.update(tag="rust-v0.159.1", upstream_sha=upstream)
+            coordinator = Harness([row])
+            request = coordinator.api.request
+
+            def api(path, *args, **kwargs):
+                if path == f"repos/openai/codex/releases/{row['id']}":
+                    return {"draft": False, "prerelease": False, "tag_name": row["tag"]}
+                if path == f"repos/openai/codex/git/ref/tags/{row['tag']}":
+                    return {"object": {"type": "commit", "sha": upstream}}
+                return request(path, *args, **kwargs)
+
+            def local_git(*args, **kwargs):
+                return "" if args[0] == "fetch" else real_git(*args, **kwargs)
+
+            with (
+                patch.object(coordinator, "ref", return_value=fork) as ref,
+                patch.object(coordinator.api, "request", side_effect=api),
+                patch.object(m, "git", side_effect=local_git),
+            ):
+                m.Coordinator.integrate(coordinator, row)
+                previous = row["source_sha"]
+                self.assertIn("codex-rs/Cargo.toml", row["conflicts"])
+                self.assertEqual((row["status"], row["attempts"]), ("repairing", 1))
+                row["status"] = "blocked"
+                checkpoint = copy.deepcopy(row)
+                real_git("checkout", "-q", "--detach", fork)
+                Path(".github/policy").write_text("reviewed manifest repair policy")
+                real_git("commit", "-am", "allow manifest repair PRs")
+                updated = real_git("rev-parse", "HEAD")
+                ref.return_value = updated
+                branch = {"object": {"sha": previous}}
+                changed = real_git(
+                    "commit-tree",
+                    previous + "^{tree}",
+                    "-p",
+                    previous,
+                    "-m",
+                    "owner work",
+                )
+                with patch.object(
+                    coordinator.api,
+                    "optional",
+                    return_value={"object": {"sha": changed}},
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "refusing to discard work"
+                    ):
+                        m.Coordinator.integrate(coordinator, row, retry_conflicts=True)
+                self.assertEqual(row, checkpoint)
+
+                def push(sha, name):
+                    self.assertEqual(name, row["branch"])
+                    branch["object"]["sha"] = sha
+
+                with (
+                    patch.object(coordinator.api, "optional", return_value=branch),
+                    patch.object(coordinator, "push", side_effect=push) as pushed,
+                ):
+                    with patch.object(
+                        coordinator,
+                        "save",
+                        side_effect=RuntimeError("interrupted save"),
+                    ):
+                        with self.assertRaisesRegex(RuntimeError, "interrupted save"):
+                            m.Coordinator.integrate(
+                                coordinator, row, retry_conflicts=True
+                            )
+                    source = branch["object"]["sha"]
+                    row.clear()
+                    row.update(checkpoint)
+                    m.Coordinator.integrate(coordinator, row, retry_conflicts=True)
+                    pushed.assert_called_once_with(source, row["branch"])
+                self.assertEqual(row["source_sha"], source)
+                self.assertEqual(row["integration_sha"], source)
+                self.assertEqual(
+                    (row["base_sha"], row["policy_sha"]), (updated, updated)
+                )
+                self.assertEqual((row["status"], row["attempts"]), ("repairing", 2))
+                self.assertEqual(
+                    real_git("rev-list", "--parents", "-n", "1", source).split()[1:],
+                    [updated, upstream, previous],
+                )
+                self.assertEqual(
+                    real_git("show", source + ":.github/policy"),
+                    "reviewed manifest repair policy",
+                )
+                self.assertIn(
+                    "<<<<<<<", real_git("show", source + ":codex-rs/Cargo.toml")
+                )
+                self.assertEqual(
+                    coordinator.api.calls[-1],
+                    (
+                        f"repos/{m.REPO}/actions/workflows/upstream-repair.lock.yml/dispatches",
+                        "POST",
+                        {
+                            "ref": m.BRANCH,
+                            "inputs": {
+                                "release_id": str(row["id"]),
+                                "source_sha": source,
+                                "candidate_branch": row["branch"],
+                                "request": row["repair_request"],
+                            },
+                        },
+                    ),
+                )
 
     def test_real_merge_tree_preserves_both_parents_and_detects_conflicts(self):
         with tempfile.TemporaryDirectory() as directory:

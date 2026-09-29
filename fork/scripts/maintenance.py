@@ -354,8 +354,29 @@ class Coordinator:
             check=True,
         )
 
-    def integrate(self, record):
+    def integrate(self, record, *, retry_conflicts=False):
         validate_record(record)
+        previous = None
+        if retry_conflicts:
+            require(
+                record["status"] == "blocked"
+                and record.get("conflicts")
+                and not record.get("pr")
+                and record.get("source_sha") == record.get("integration_sha")
+                and SHA.fullmatch(record.get("integration_sha", "")),
+                "Only an unchanged blocked integration without a repair PR may be refreshed",
+            )
+            require(
+                record["attempts"] < BOOT["max_repair_attempts"],
+                "The persisted repair budget is exhausted",
+            )
+            require(
+                not self.api.pages(
+                    f"repos/{REPO}/pulls?state=open&base={record['branch']}"
+                ),
+                "An existing candidate PR needs review before refreshing integration",
+            )
+            previous = record["integration_sha"]
         release = self.api.request(f"repos/{UPSTREAM}/releases/{record['id']}")
         if (
             release["draft"]
@@ -371,7 +392,6 @@ class Coordinator:
             )
             return
         base = self.ref()
-        record.update(base_sha=base, policy_sha=base)
         git("fetch", "--no-tags", "origin", base)
         git(
             "fetch",
@@ -379,6 +399,20 @@ class Coordinator:
             "https://github.com/" + UPSTREAM + ".git",
             record["upstream_sha"],
         )
+        if previous:
+            git("fetch", "--no-tags", "origin", previous)
+            for ancestor, descendant in (
+                (record["base_sha"], base),
+                (record["base_sha"], previous),
+                (record["upstream_sha"], previous),
+            ):
+                require(
+                    subprocess.run(
+                        ["git", "merge-base", "--is-ancestor", ancestor, descendant]
+                    ).returncode
+                    == 0,
+                    "Refreshed integration would lose release ancestry",
+                )
         if record["id"] == BOOT["release_id"] and record["revision"] == 1:
             require(
                 record["upstream_sha"] == BOOT["upstream_sha"], "Bootstrap tag moved"
@@ -481,15 +515,15 @@ class Coordinator:
                 GIT_COMMITTER_NAME="github-actions[bot]",
                 GIT_COMMITTER_EMAIL="41898282+github-actions[bot]@users.noreply.github.com",
             )
+            parents = ["-p", base, "-p", record["upstream_sha"]]
+            if previous:
+                parents.extend(["-p", previous])
             source = subprocess.check_output(
                 [
                     "git",
                     "commit-tree",
                     tree,
-                    "-p",
-                    base,
-                    "-p",
-                    record["upstream_sha"],
+                    *parents,
                     "-m",
                     f"Integrate {record['tag']} with fork policy preserved",
                 ],
@@ -497,7 +531,23 @@ class Coordinator:
                 text=True,
             ).strip()
         existing = self.api.optional(f"repos/{REPO}/git/ref/heads/{record['branch']}")
-        if existing:
+        if previous:
+            require(existing, "The recorded candidate branch no longer exists")
+            head = existing["object"]["sha"]
+            if head == previous:
+                self.push(source, record["branch"])
+            else:
+                # Recover only our exact refresh after push-before-save interruption.
+                git("fetch", "--no-tags", "origin", head)
+                require(
+                    git("rev-parse", head + "^{tree}")
+                    == git("rev-parse", source + "^{tree}")
+                    and git("rev-list", "--parents", "-n", "1", head).split()[1:]
+                    == [base, record["upstream_sha"], previous],
+                    "Candidate changed; refusing to discard work during integration refresh",
+                )
+                source = head
+        elif existing:
             # Recovery after a successful push but before state was saved.
             source = existing["object"]["sha"]
             git("fetch", "--no-tags", "origin", source)
@@ -512,6 +562,8 @@ class Coordinator:
         else:
             self.push(source, record["branch"])
         record.update(
+            base_sha=base,
+            policy_sha=base,
             source_sha=source,
             integration_sha=source,
             conflicts="\n".join(conflicts)[:12000],
@@ -796,7 +848,12 @@ class Coordinator:
         if record["status"] == "pending":
             self.integrate(record)
         elif record["status"] == "integrated":
-            self.build(record)
+            if record.get("conflicts"):
+                self.repair(
+                    record, "Mechanical integration has unresolved merge conflicts"
+                )
+            else:
+                self.build(record)
         elif retry and record["status"] == "publication_failed":
             run = self.api.request(f"repos/{REPO}/actions/runs/{record['build_run']}")
             require(
@@ -806,7 +863,14 @@ class Coordinator:
             )
             self.publish(record, run)
         elif retry and record["status"] in ("blocked", "review"):
-            self.build(record)  # Owner retry; budget is retained, never reset.
+            if (
+                record["status"] == "blocked"
+                and record.get("conflicts")
+                and not record.get("pr")
+            ):
+                self.integrate(record, retry_conflicts=True)
+            else:
+                self.build(record)  # Owner retry; budget is retained, never reset.
         elif record["status"] in ("building", "repairing"):
             workflow = (
                 "fork-build.yml"
