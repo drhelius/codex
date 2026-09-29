@@ -351,7 +351,10 @@ class MaintenanceTests(unittest.TestCase):
     def test_build_failure_dispatches_real_ghaw_repair(self):
         row = record(status="building")
         coordinator = Harness([row])
-        coordinator.build_result(run(row, success=False))
+        # Package jobs may already have uploaded all assets when a parallel test fails.
+        with patch.object(coordinator, "publish") as publish:
+            coordinator.build_result(run(row, success=False))
+            publish.assert_not_called()
         self.assertEqual(row["status"], "repairing")
         self.assertTrue(
             coordinator.api.calls[-1][0].endswith("upstream-repair.lock.yml/dispatches")

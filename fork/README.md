@@ -120,9 +120,11 @@ and native macOS/Linux/Windows installer checks must pass before the Rust matrix
 starts. It installs the release's exact Rust toolchain, uses locked Cargo
 dependencies and builds on standard hosted runners for macOS ARM64/x86_64,
 Linux ARM64/x86_64 (musl) and Windows x86_64. A failed target cancels the remaining
-matrix work; publication still requires all five targets to succeed. Each target runs deterministic
-selector gates and existing MCP tests, builds the CLI and helper binaries, then
-smoke-tests an extracted archive with a local MCP server and local model endpoint.
+matrix work; publication still requires all five targets to succeed. Each target has
+two parallel jobs: deterministic selector/MCP tests and optimized distribution
+builds with extracted-archive smoke tests. Both phases must succeed on all targets;
+an uploaded package cannot bypass a failed test job. Archive checks use a local
+MCP server and local model endpoint.
 Native installer fixtures cover updates, rollback, failed integrity checks and
 official-Codex coexistence; an extracted CLI also exercises its real update command
 against local release fixtures. Keep these gates and bundled installers across integrations.
@@ -131,9 +133,17 @@ fork identity lives in help output and release provenance. Native Unix gates als
 verify that a daemon copied from the fork cannot enable official automatic updates.
 No desktop application, real model or paid inference is needed by those tests.
 Pinned official `just` and `cargo-nextest` binaries are SHA-256 verified instead
-of compiled from source on every runner. Cargo downloads are cached before
-release compilation, including after a test failure; a cold Rust build still
-compiles both test and optimized release profiles. Cargo source caches are used
+of compiled from source on every runner. The pinned Rust cache action retains
+compiled external dependencies and Cargo downloads, including after failures,
+with separate keys for each platform, phase, compiler, build environment and lockfile.
+Workspace crates and test binaries are rebuilt, and Cargo still checks dependency
+fingerprints. The release retains upstream optimization and thin LTO. Test and
+release profiles compile concurrently on separate standard runners; four compiler
+jobs are allowed on the 14/16-GB runners and two on the 7-GB ARM Mac.
+The focused core selector harness reuses the original ten integration cases;
+the complete upstream suite keeps its original registration. The gate selects
+the same 416 MCP/TUI cases without building unrelated integration binaries.
+Cargo timing reports are retained as diagnostic artifacts. Caches are used
 only by unprivileged build jobs. Privileged jobs
 restore no build cache and execute no candidate binaries/scripts.
 

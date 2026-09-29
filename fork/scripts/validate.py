@@ -46,6 +46,10 @@ def setup():
     )
     if TARGET:
         run("rustup", "target", "add", "--toolchain", toolchain, TARGET)
+    # Cache inspection runs at the checkout root, outside rust-toolchain.toml.
+    if os.environ.get("GITHUB_ENV"):
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+            env.write("RUSTUP_TOOLCHAIN=" + toolchain + "\n")
     from tools import install
 
     directory = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin"
@@ -120,10 +124,20 @@ def tests():
     )
     target = build_env(native=True)
     target_args = ["--target", target] if TARGET else []
-    run("cargo", "build", "--locked", *target_args, "-p", "codex-rmcp-client", "--bins")
     # Remote transport tests launch the CLI as an exec-server. It is not a bin
-    # target of any package selected by the nextest filter below.
-    run("cargo", "build", "--locked", *target_args, "-p", "codex-cli", "--bin", "codex")
+    # target of the nextest filter. Build all prerequisites in one feature graph.
+    run(
+        "cargo",
+        "build",
+        "--locked",
+        "--timings",
+        *target_args,
+        "-p",
+        "codex-rmcp-client",
+        "-p",
+        "codex-cli",
+        "--bins",
+    )
     output = RS / "target" / target / "debug" if TARGET else RS / "target/debug"
     suffix = ".exe" if os.name == "nt" else ""
     os.environ["CARGO_BIN_EXE_codex"] = str(output / ("codex" + suffix))
@@ -135,6 +149,16 @@ def tests():
     test_args = [
         "--locked",
         *target_args,
+        # Compile the same selected cases without the unrelated core integration suite.
+        "--lib",
+        "--test",
+        "mcp_server_selection",
+        "--test",
+        "streamable_http_recovery",
+        "--test",
+        "streamable_http_remote",
+        "--test",
+        "streamable_http_user_agent",
         "-p",
         "codex-core",
         "-p",
@@ -176,15 +200,10 @@ def tests():
 
 def package():
     target = build_env()
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        # Tests have finished. Reclaim only this job's debug outputs before release linking.
-        for debug in (RS / "target/debug", RS / "target" / target / "debug"):
-            if debug.is_dir():
-                shutil.rmtree(debug)
     spec_windows = "windows" in target
     suffix = ".exe" if spec_windows else ""
     out = RS / "target" / target / "release"
-    args = ["--target", target, "--release", "--locked"]
+    args = ["--target", target, "--release", "--locked", "--timings"]
     prebuilt = []
     if "linux" in target:
         run("cargo", "build", *args, "--bin", "bwrap")

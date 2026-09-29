@@ -1,5 +1,22 @@
 # Bootstrap progress
 
+## Build performance follow-up
+
+- [x] Inspect live build steps and distinguish compilation from test execution.
+- [x] Run tests and optimized packaging in parallel for all five platforms.
+- [x] Cache compiled dependencies with the pinned release toolchain and isolated phase keys.
+- [x] Use four compiler jobs where runner memory permits; retain two on ARM macOS.
+- [x] Reuse selector cases in a focused harness and preserve the original full-suite registration.
+- [x] Confirm the exact existing test set, run release gates and check workflow compilation.
+- [ ] Sign, push and hand the optimized build to Actions.
+
+Local validation: the old and focused gates select the same 416 cases, and all
+416 pass with retries disabled. The fork daemon bootstrap regression also passes.
+Thirty offline script fixtures pass; the two Windows-only fixtures remain mandatory
+in Actions. Both gh-aw definitions compile without warnings or generated changes,
+and workflow lint passes. The expanded matrix has exactly two phases per target.
+Full hosted build timings and the new dependency caches will be measured by Actions.
+
 ## Build reliability follow-up
 
 - [x] Diagnose the native Windows update failure and cold tool-setup delay from Actions logs.
@@ -11,7 +28,7 @@
 - [x] Sign and push the installer/build fixes (`f79c45f688`).
 - [x] Diagnose the handoff's transient GitHub API 504 and add bounded read-only retries.
 - [x] Fix incompatible PowerShell module inheritance exposed by the fast native Windows gate.
-- [ ] Supersede the obsolete build and hand the replacement run to Actions.
+- [x] Supersede the obsolete build and hand the replacement run to Actions (36595825015).
 
 Local checks: 28 offline fixtures pass; the two native Windows fixtures remain
 required in Actions. Both gh-aw definitions compile with no warnings and unchanged

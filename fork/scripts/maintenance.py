@@ -37,6 +37,7 @@ BOUNDARY = [
     "fork",
     ".github",
     "AGENTS.md",
+    "codex-rs/core/tests/mcp_server_selection.rs",
     "codex-rs/core/tests/suite/mcp_server_selection.rs",
     "codex-rs/tui/src/bottom_pane/mcp_selection_tests.rs",
     "codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__mcp_selection__tests__mcp_selector_appearance.snap",
