@@ -95,11 +95,20 @@ class API:
                     result.remove_header("Authorization")
                 return result
 
-        with urllib.request.build_opener(Redirect()).open(
-            urllib.request.Request(url, body, headers, method=method), timeout=120
-        ) as response:
-            result = response.read()
-        return result if binary else (json.loads(result) if result else None)
+        for attempt in range(3):
+            try:
+                with urllib.request.build_opener(Redirect()).open(
+                    urllib.request.Request(url, body, headers, method=method),
+                    timeout=120,
+                ) as response:
+                    result = response.read()
+                return result if binary else (json.loads(result) if result else None)
+            except urllib.error.HTTPError as error:
+                # A failed write can already have taken effect. Retry only reads.
+                if method != "GET" or error.code not in (502, 503, 504) or attempt == 2:
+                    raise
+                print(f"Retrying GitHub read after HTTP {error.code}", file=sys.stderr)
+                time.sleep(2**attempt)
 
     def optional(self, path):
         try:

@@ -8,7 +8,9 @@
 - [x] Verify pinned prebuilt test tools for every supported runner; preserve dependency downloads after failed tests.
 - [x] Keep cancelled and installer-policy failures outside the Copilot repair budget.
 - [x] Run local script, PowerShell, workflow and compiler-consistency checks.
-- [ ] Sign and push; supersede the obsolete build and hand the new run to Actions.
+- [x] Sign and push the installer/build fixes (`f79c45f688`).
+- [x] Diagnose the handoff's transient GitHub API 504 and add bounded read-only retries.
+- [ ] Supersede the obsolete build and hand the replacement run to Actions.
 
 Local checks: 28 offline fixtures pass; the two native Windows fixtures remain
 required in Actions. Both gh-aw definitions compile with no warnings and unchanged

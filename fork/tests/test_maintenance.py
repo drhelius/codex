@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -189,6 +189,34 @@ def fill_artifacts(api, row, workflow):
 
 
 class MaintenanceTests(unittest.TestCase):
+    def test_transient_github_read_failure_recovers(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"id": 42}'
+        error = m.urllib.error.HTTPError(
+            "https://api.github.com/fixture", 504, "Gateway Timeout", {}, None
+        )
+        with (
+            patch.object(m.urllib.request, "build_opener") as opener,
+            patch.object(m.time, "sleep"),
+        ):
+            opener.return_value.open.side_effect = [error, response]
+            self.assertEqual(m.API().request("fixture"), {"id": 42})
+            self.assertEqual(opener.return_value.open.call_count, 2)
+
+    def test_github_read_retries_are_bounded_and_writes_are_never_repeated(self):
+        for method, attempts in (("GET", 3), ("POST", 1)):
+            with (
+                self.subTest(method=method),
+                patch.object(m.urllib.request, "build_opener") as opener,
+                patch.object(m.time, "sleep"),
+            ):
+                opener.return_value.open.side_effect = m.urllib.error.HTTPError(
+                    "https://api.github.com/fixture", 504, "Gateway Timeout", {}, None
+                )
+                with self.assertRaises(m.urllib.error.HTTPError):
+                    m.API().request("fixture", method=method)
+                self.assertEqual(opener.return_value.open.call_count, attempts)
+
     def test_completion_waits_for_authoritative_result_and_verifies_workflow(self):
         row = record(status="building")
         coordinator = Harness([row])
