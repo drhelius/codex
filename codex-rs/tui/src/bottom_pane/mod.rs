@@ -75,8 +75,10 @@ mod approval_overlay;
 mod async_questions;
 mod empty_state_policy;
 mod hook_status;
+mod mcp_selection;
 mod mcp_server_elicitation;
 mod multi_select_picker;
+pub(crate) use mcp_selection::mcp_selection_picker;
 #[cfg(test)]
 #[path = "questions_tests.rs"]
 mod question_tests;

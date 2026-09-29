@@ -104,6 +104,7 @@ impl McpConnectionSet {
     ) -> Self {
         Self {
             servers: HashMap::new(),
+            retained_servers: HashMap::new(),
             event_stream_connection: None,
             disabled_servers: Vec::new(),
             required_servers: Vec::new(),

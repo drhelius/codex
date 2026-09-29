@@ -1530,6 +1530,12 @@ impl App {
                         .on_plugin_enabled_set(cwd, plugin_id, enabled, result);
                 }
             }
+            AppEvent::OpenMcpSelection { thread_id } => {
+                self.mcp_selection(app_server, thread_id, /*servers*/ None).await;
+            }
+            AppEvent::SetMcpSelection { thread_id, servers } => {
+                self.mcp_selection(app_server, thread_id, Some(servers)).await;
+            }
             AppEvent::FetchMcpInventory { detail, thread_id } => {
                 self.fetch_mcp_inventory(app_server, detail, thread_id);
             }

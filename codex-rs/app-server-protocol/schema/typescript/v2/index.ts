@@ -296,6 +296,9 @@ export type { McpServerOauthLoginCompletedNotification } from "./McpServerOauthL
 export type { McpServerOauthLoginParams } from "./McpServerOauthLoginParams";
 export type { McpServerOauthLoginResponse } from "./McpServerOauthLoginResponse";
 export type { McpServerRefreshResponse } from "./McpServerRefreshResponse";
+export type { McpServerSelectionEntry } from "./McpServerSelectionEntry";
+export type { McpServerSelectionParams } from "./McpServerSelectionParams";
+export type { McpServerSelectionResponse } from "./McpServerSelectionResponse";
 export type { McpServerStartupFailureReason } from "./McpServerStartupFailureReason";
 export type { McpServerStartupState } from "./McpServerStartupState";
 export type { McpServerStatus } from "./McpServerStatus";

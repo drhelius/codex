@@ -1,0 +1,51 @@
+name: Fork Coordinator
+on:
+  workflow_dispatch:
+    inputs:
+      retry:
+        description: Owner retry of pending work, retaining the repair budget
+        type: boolean
+        default: false
+      release_id:
+        description: Upstream release ID for an explicit corrected or recovery revision
+        type: string
+      source_sha:
+        description: Owner-selected source commit to validate for the pending release
+        type: string
+      revision:
+        description: Next revision number for a published release or failed publication
+        type: string
+  push:
+    branches: [fork-main]
+  workflow_run:
+    workflows: [Fork Build, Fork Repair]
+    types: [completed]
+    branches: [fork-main]
+  pull_request:
+    types: [closed]
+    branches: ['fork-candidates/**']
+permissions: {}
+concurrency:
+  group: fork-maintenance
+  cancel-in-progress: false
+jobs:
+  coordinate:
+    if: github.repository == 'drhelius/codex' && (github.event_name != 'pull_request' || (github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
+      pull-requests: read
+      issues: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fork-main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Coordinate using trusted maintained policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I fork/scripts/maintenance.py coordinate

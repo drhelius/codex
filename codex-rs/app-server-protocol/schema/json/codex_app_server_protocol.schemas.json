@@ -2056,6 +2056,30 @@
             },
             "method": {
               "enum": [
+                "thread/mcp/selection"
+              ],
+              "title": "Thread/mcp/selectionRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/McpServerSelectionParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/mcp/selectionRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "mcpServer/resource/read"
               ],
               "title": "McpServer/resource/readRequestMethod",
@@ -14920,6 +14944,71 @@
       "McpServerRefreshResponse": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "McpServerRefreshResponse",
+        "type": "object"
+      },
+      "McpServerSelectionEntry": {
+        "properties": {
+          "connectionStatus": {
+            "$ref": "#/definitions/v2/McpServerConnectionStatus"
+          },
+          "lockedReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "selected": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connectionStatus",
+          "name",
+          "selected"
+        ],
+        "type": "object"
+      },
+      "McpServerSelectionParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Inspect or stage server availability for the next complete turn in a live thread.",
+        "properties": {
+          "selectedServers": {
+            "description": "Omit to inspect without side effects. An empty list deselects optional servers.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId"
+        ],
+        "title": "McpServerSelectionParams",
+        "type": "object"
+      },
+      "McpServerSelectionResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "servers": {
+            "items": {
+              "$ref": "#/definitions/v2/McpServerSelectionEntry"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "servers"
+        ],
+        "title": "McpServerSelectionResponse",
         "type": "object"
       },
       "McpServerStartupFailureReason": {

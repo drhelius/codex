@@ -106,6 +106,34 @@ pub struct ListMcpServerStatusResponse {
     pub next_cursor: Option<String>,
 }
 
+/// Inspect or stage server availability for the next complete turn in a live thread.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct McpServerSelectionParams {
+    pub thread_id: String,
+    /// Omit to inspect without side effects. An empty list deselects optional servers.
+    #[ts(optional = nullable)]
+    pub selected_servers: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct McpServerSelectionEntry {
+    pub name: String,
+    pub selected: bool,
+    pub locked_reason: Option<String>,
+    pub connection_status: McpServerConnectionStatus,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct McpServerSelectionResponse {
+    pub servers: Vec<McpServerSelectionEntry>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]

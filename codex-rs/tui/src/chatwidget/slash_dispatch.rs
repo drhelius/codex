@@ -805,7 +805,22 @@ impl ChatWidget {
             }
             SlashCommand::Mcp => match trimmed.to_ascii_lowercase().as_str() {
                 "verbose" => self.add_mcp_output(McpServerStatusDetail::Full),
-                _ => self.add_error_message("Usage: /mcp [verbose]".to_string()),
+                "select" => {
+                    if self.bottom_pane.is_task_running() {
+                        self.add_error_message(
+                            "MCP selection can only change between complete turns.".to_string(),
+                        );
+                    } else if let Some(thread_id) = self.thread_id() {
+                        self.app_event_tx
+                            .send(AppEvent::OpenMcpSelection { thread_id });
+                    } else {
+                        self.add_error_message(
+                            "Wait for the conversation to start before selecting MCP servers."
+                                .to_string(),
+                        );
+                    }
+                }
+                _ => self.add_error_message("Usage: /mcp [verbose|select]".to_string()),
             },
             SlashCommand::Keymap => match trimmed.to_ascii_lowercase().as_str() {
                 "" => self.open_keymap_picker(),

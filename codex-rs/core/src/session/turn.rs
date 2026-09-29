@@ -168,6 +168,22 @@ pub(crate) async fn run_turn(
     prewarmed_client_session: Option<ModelClientSession>,
     cancellation_token: CancellationToken,
 ) -> CodexResult<Option<String>> {
+    if sess.services.mcp_runtime.commit_selection() {
+        sess.mark_mcp_runtime_dirty();
+    }
+    if sess.services.mcp_runtime.active_selection().is_some() {
+        tokio::select! {
+            () = cancellation_token.cancelled() => {
+                sess.services.mcp_runtime.cancel_startup();
+                return Err(CodexErr::TurnAborted);
+            }
+            () = async {
+                sess.refresh_mcp_if_dirty().await;
+                // Explicit activation completes discovery before even a compaction request.
+                sess.services.mcp_runtime.current_binding().await;
+            } => {}
+        }
+    }
     if crate::guardian::is_basic_session_source(&turn_context.session_source) {
         crate::guardian::check_pending_guardian_input(&sess, &turn_context).await?;
     }

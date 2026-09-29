@@ -209,6 +209,7 @@ impl McpServerView {
 /// A published view over a set of running MCP server connections.
 pub(crate) struct McpConnectionSet {
     servers: HashMap<String, McpServerView>,
+    retained_servers: HashMap<String, McpServerView>,
     pub(crate) event_stream_connection: Option<Arc<EventStreamConnectionSettings>>,
     disabled_servers: Vec<String>,
     required_servers: Vec<String>,
@@ -261,6 +262,19 @@ impl McpConnectionSet {
         let tool_plugin_context = crate::mcp::tool_plugin_context(&config);
         let auth = auth.as_ref();
         let mut servers = HashMap::new();
+        let retained_servers = previous
+            .into_iter()
+            .flat_map(|previous| previous.servers.iter().chain(&previous.retained_servers))
+            .filter(|(name, _)| {
+                mcp_servers.get(*name).is_some_and(|server| {
+                    !server.enabled() && server.config().disabled_reason.is_none()
+                }) && config
+                    .server_selection
+                    .as_ref()
+                    .is_some_and(|selection| !selection.contains(*name))
+            })
+            .map(|(name, view)| (name.clone(), view.clone()))
+            .collect();
         let mut event_stream_connection = None;
         let disabled_servers = mcp_servers
             .iter()
@@ -279,7 +293,7 @@ impl McpConnectionSet {
         let allow_deferred_startup =
             startup_policy == McpStartupPolicy::LazyWhenCached && previous.is_some();
         let reusable_previous = previous.filter(|previous| {
-            !previous.servers.is_empty()
+            (!previous.servers.is_empty() || !previous.retained_servers.is_empty())
                 && previous.elicitation_requests.update(
                     Arc::clone(&config),
                     elicitation_reviewer.clone(),
@@ -451,7 +465,12 @@ impl McpConnectionSet {
                 client_elicitation_capability.clone(),
                 client_mcp_extensions.clone(),
                 previous
-                    .and_then(|previous| previous.servers.get(&server_name))
+                    .and_then(|previous| {
+                        previous
+                            .servers
+                            .get(&server_name)
+                            .or_else(|| previous.retained_servers.get(&server_name))
+                    })
                     .and_then(|view| view.connection.identity.as_ref()),
             );
             let expected_protocol_mode = match &configured_config.transport {
@@ -474,9 +493,12 @@ impl McpConnectionSet {
                     Some(_) => None,
                 },
             };
-            if let Some(previous_view) =
-                reusable_previous.and_then(|previous| previous.servers.get(&server_name))
-            {
+            if let Some(previous_view) = reusable_previous.and_then(|previous| {
+                previous
+                    .servers
+                    .get(&server_name)
+                    .or_else(|| previous.retained_servers.get(&server_name))
+            }) {
                 let connection = Arc::clone(&previous_view.connection);
                 let reusable_pending_startup = connection.identity.as_ref()
                     == Some(&connection_identity)
@@ -520,7 +542,15 @@ impl McpConnectionSet {
                         McpServerView {
                             connection,
                             protocol_mode,
-                            startup_readiness: configured_config.startup_readiness,
+                            startup_readiness: if config
+                                .server_selection
+                                .as_ref()
+                                .is_some_and(|selection| selection.contains(&server_name))
+                            {
+                                McpStartupReadiness::Connection
+                            } else {
+                                configured_config.startup_readiness
+                            },
                             metadata,
                             tool_filter: configured_tool_filter,
                             tool_timeout: configured_tool_timeout,
@@ -630,6 +660,10 @@ impl McpConnectionSet {
                 catalog_item_limit,
             );
             let defer_startup = allow_deferred_startup
+                && !config
+                    .server_selection
+                    .as_ref()
+                    .is_some_and(|selection| selection.contains(&server_name))
                 && !tool_plugin_context.is_selected_plugin_mcp_server(&server_name)
                 && async_managed_client
                     .tool_catalog_cache_context
@@ -658,7 +692,15 @@ impl McpConnectionSet {
                         _diagnostics_guard: LIVE_CONNECTIONS.track(),
                     }),
                     protocol_mode,
-                    startup_readiness: configured_config.startup_readiness,
+                    startup_readiness: if config
+                        .server_selection
+                        .as_ref()
+                        .is_some_and(|selection| selection.contains(&server_name))
+                    {
+                        McpStartupReadiness::Connection
+                    } else {
+                        configured_config.startup_readiness
+                    },
                     metadata,
                     tool_filter: configured_tool_filter,
                     tool_timeout: configured_tool_timeout,
@@ -781,6 +823,7 @@ impl McpConnectionSet {
         }
         let manager = Self {
             servers,
+            retained_servers,
             event_stream_connection,
             disabled_servers,
             required_servers,
@@ -839,6 +882,7 @@ impl McpConnectionSet {
     pub fn empty(prefix_mcp_tool_names: bool) -> Self {
         Self {
             servers: HashMap::new(),
+            retained_servers: HashMap::new(),
             event_stream_connection: None,
             disabled_servers: Vec::new(),
             required_servers: Vec::new(),
@@ -925,6 +969,7 @@ impl McpConnectionSet {
         let connections = self
             .servers
             .values()
+            .chain(self.retained_servers.values())
             .map(|view| Arc::clone(&view.connection))
             .collect::<Vec<_>>();
         // Keep cleanup alive if an interrupt cancels the refresh that requested it.

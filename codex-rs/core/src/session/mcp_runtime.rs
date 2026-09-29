@@ -317,6 +317,9 @@ impl Session {
             plugins_available,
             selected_plugins: _,
         } = mcp_projection;
+        if self.services.mcp_runtime.current_config().is_some() {
+            config.server_selection = self.services.mcp_runtime.active_selection();
+        }
         config.approval_policy = desired.config.permissions.approval_policy.clone();
         config.permission_profile = desired.config.permissions.effective_permission_profile();
         config.approvals_reviewer = desired.config.approvals_reviewer;

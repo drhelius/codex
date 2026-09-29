@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "repository": "drhelius/codex",
+  "branch": "fork-main",
+  "upstream_repository": "openai/codex",
+  "release_id": 398926954,
+  "upstream_tag": "rust-v0.159.0",
+  "upstream_sha": "687a119f0fcaace47e1f1abcc77cec6c813fd6da",
+  "published_at": "2026-09-29T08:05:42Z",
+  "include_prereleases": false,
+  "auto_merge_repairs": false,
+  "max_repair_attempts": 3,
+  "gh_aw": "v0.87.4",
+  "copilot_cli": "1.0.80"
+}

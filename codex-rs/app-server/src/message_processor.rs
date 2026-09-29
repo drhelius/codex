@@ -1690,6 +1690,9 @@ impl MessageProcessor {
                     .mcp_server_status_list(&request_id, params)
                     .await
             }
+            ClientRequest::McpServerSelection { params, .. } => {
+                self.mcp_processor.mcp_server_selection(params).await
+            }
             ClientRequest::McpResourceRead { params, .. } => {
                 self.mcp_processor
                     .mcp_resource_read(&request_id, params)

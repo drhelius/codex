@@ -1236,6 +1236,12 @@ client_request_definitions! {
         response: v2::ListMcpServerStatusResponse,
     },
 
+    McpServerSelection => "thread/mcp/selection" {
+        params: v2::McpServerSelectionParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::McpServerSelectionResponse,
+    },
+
     McpResourceRead => "mcpServer/resource/read" {
         params: v2::McpResourceReadParams,
         serialization: optional_thread_id(params.thread_id),

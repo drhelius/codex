@@ -848,6 +848,11 @@ impl Session {
         // todo(aibrahim): store this state somewhere else so we don't need to mut config
         let config = session_configuration.original_config_do_not_use.clone();
         let mut per_turn_config = (*config).clone();
+        per_turn_config.mcp_server_selection = self
+            .services
+            .mcp_runtime
+            .next_selection()
+            .or(per_turn_config.mcp_server_selection);
         per_turn_config.cwd = cwd;
         per_turn_config.permissions.approval_policy =
             session_configuration.step_settings.approval_policy.clone();

@@ -318,3 +318,15 @@ Tests and features must support Linux, macOS and Windows unless feature is expli
 
 Codex supports running connected app-server and exec-server on different operating systems. See the
 `$remote-tests` skill for details about integration testing these configurations.
+
+## Codex Gear fork maintenance boundary
+
+Read `fork/SELECTOR.md` and `fork/README.md` before maintaining this fork.
+Preserve the entire conversation-local server selection contract and mandatory
+regression gates. `fork/`, `.github/`, this file and the dedicated selector tests
+are fork-owned policy. Automated upstream integration restores these paths from
+`fork-main`; repair agents cannot edit them or weaken tests/security. Keep
+upstream ancestry, use the exact ledger release identity, and make additive
+repairs through the one owned candidate PR. Do not enable archived upstream
+workflows, publish partial platform matrices, or replace the fork with official
+binaries. Automation/security/dependency/test-policy changes require owner review.

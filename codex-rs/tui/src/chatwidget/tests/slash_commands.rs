@@ -2732,6 +2732,17 @@ async fn slash_mcp_verbose_requests_full_inventory_via_app_server() {
 }
 
 #[tokio::test]
+async fn slash_mcp_selection_requests_passive_conversation_picker() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let thread_id = ThreadId::new();
+    chat.thread_id = Some(thread_id);
+    submit_composer_text(&mut chat, "/mcp select");
+    assert_matches!(rx.try_recv(), Ok(AppEvent::FollowTranscript));
+    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenMcpSelection { thread_id: actual }) if actual == thread_id);
+    assert!(op_rx.try_recv().is_err());
+}
+
+#[tokio::test]
 async fn slash_mcp_invalid_args_show_usage() {
     let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 
@@ -2744,7 +2755,7 @@ async fn slash_mcp_invalid_args_show_usage() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        rendered.contains("Usage: /mcp [verbose]"),
+        rendered.contains("Usage: /mcp [verbose|select]"),
         "expected usage message, got: {rendered:?}"
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/mcp full");

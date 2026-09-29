@@ -2620,6 +2620,37 @@ class McpServerRefreshResponse(BaseModel):
     )
 
 
+class McpServerSelectionEntry(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    connection_status: Annotated[McpServerConnectionStatus, Field(alias="connectionStatus")]
+    locked_reason: Annotated[str | None, Field(alias="lockedReason")] = None
+    name: str
+    selected: bool
+
+
+class McpServerSelectionParams(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    selected_servers: Annotated[
+        list[str] | None,
+        Field(
+            alias="selectedServers",
+            description="Omit to inspect without side effects. An empty list deselects optional servers.",
+        ),
+    ] = None
+    thread_id: Annotated[str, Field(alias="threadId")]
+
+
+class McpServerSelectionResponse(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    servers: list[McpServerSelectionEntry]
+
+
 class McpServerStartupFailureReason(RootModel[Literal["reauthenticationRequired"]]):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -7406,6 +7437,17 @@ class ConfigMcpServerReloadRequest(BaseModel):
         Literal["config/mcpServer/reload"], Field(title="Config/mcpServer/reloadRequestMethod")
     ]
     params: None = None
+
+
+class ThreadMcpSelectionRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: RequestId
+    method: Annotated[
+        Literal["thread/mcp/selection"], Field(title="Thread/mcp/selectionRequestMethod")
+    ]
+    params: McpServerSelectionParams
 
 
 class McpServerToolCallRequest(BaseModel):
@@ -12519,6 +12561,7 @@ class ClientRequest(
         | McpServerOauthLoginRequest
         | ConfigMcpServerReloadRequest
         | McpServerStatusListRequest
+        | ThreadMcpSelectionRequest
         | McpServerResourceReadRequest
         | McpServerToolCallRequest
         | WindowsSandboxSetupStartRequest
@@ -12629,6 +12672,7 @@ class ClientRequest(
         | McpServerOauthLoginRequest
         | ConfigMcpServerReloadRequest
         | McpServerStatusListRequest
+        | ThreadMcpSelectionRequest
         | McpServerResourceReadRequest
         | McpServerToolCallRequest
         | WindowsSandboxSetupStartRequest

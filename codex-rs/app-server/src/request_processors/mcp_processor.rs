@@ -18,6 +18,28 @@ pub(crate) struct McpRequestProcessor {
 }
 
 impl McpRequestProcessor {
+    pub(crate) async fn mcp_server_selection(
+        &self,
+        params: codex_app_server_protocol::McpServerSelectionParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let (_, thread) = self.load_thread(&params.thread_id).await?;
+        let servers = thread
+            .mcp_server_selection(params.selected_servers)
+            .await
+            .map_err(|error| invalid_request(error.to_string()))?
+            .into_iter()
+            .map(|entry| codex_app_server_protocol::McpServerSelectionEntry {
+                name: entry.name,
+                selected: entry.selected,
+                locked_reason: entry.locked_reason,
+                connection_status: entry.connection_status.into(),
+            })
+            .collect();
+        Ok(Some(
+            codex_app_server_protocol::McpServerSelectionResponse { servers }.into(),
+        ))
+    }
+
     pub(crate) fn new(
         auth_manager: Arc<AuthManager>,
         thread_manager: Arc<ThreadManager>,
@@ -296,11 +318,9 @@ impl McpRequestProcessor {
             McpServerStatusDetail::ToolsAndAuthOnly => McpSnapshotDetail::ToolsAndAuthOnly,
         };
 
-        let (mcp_config, snapshot) = if let (Some(thread), Some(server)) =
-            (thread.as_ref(), params.server_name.as_deref())
-        {
+        let (mcp_config, snapshot) = if let Some(thread) = thread.as_ref() {
             thread
-                .mcp_server_status_snapshot(server, detail)
+                .mcp_server_status_snapshot(params.server_name.as_deref(), detail)
                 .await
                 .map_err(|error| {
                     internal_error(format!("failed to read MCP server status: {error:#}"))

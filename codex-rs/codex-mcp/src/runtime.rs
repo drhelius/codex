@@ -5,7 +5,9 @@
 //! [`crate::rmcp_client`] and connection-set behavior lives in
 //! [`crate::connection_manager`].
 
+mod selection;
 mod status;
+pub use selection::McpServerSelectionEntry;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -101,6 +103,8 @@ pub struct McpRuntimeInput {
 /// Publication replaces the latest state atomically. Existing bindings retain
 /// their exact connections and configuration for as long as they are needed.
 pub struct McpRuntime {
+    selection: Mutex<selection::ConversationSelection>,
+    publication_lock: tokio::sync::Semaphore,
     current: ArcSwap<PublishedMcpRuntime>,
     event_stream_cancellation: Mutex<EventStreamCancellation>,
     reconnect_pending: AtomicBool,
@@ -225,6 +229,8 @@ impl McpRuntime {
     /// runtime handle before its full MCP inputs are available.
     pub fn empty(prefix_mcp_tool_names: bool) -> Self {
         Self {
+            selection: Mutex::default(),
+            publication_lock: tokio::sync::Semaphore::new(1),
             current: ArcSwap::from_pointee(PublishedMcpRuntime {
                 connections: Arc::new(McpConnectionSet::empty(prefix_mcp_tool_names)),
                 config: None,
@@ -310,6 +316,10 @@ impl McpRuntime {
 
     /// Reconciles configured servers and publishes their immutable runtime snapshot.
     pub async fn replace(&self, input: McpRuntimeInput) {
+        let Ok(_publication) = self.publication_lock.acquire().await else {
+            tracing::error!("MCP publication semaphore closed");
+            return;
+        };
         let current = self.current.load_full();
         let mut reconnect = McpReconnectGuard {
             pending: &self.reconnect_pending,
@@ -325,6 +335,7 @@ impl McpRuntime {
 
     /// Starts fresh connections and returns their complete, refreshed Apps catalog.
     pub async fn replace_fresh(&self, input: McpRuntimeInput) -> anyhow::Result<Vec<ToolInfo>> {
+        let _publication = self.publication_lock.acquire().await?;
         self.publish(input, /*previous*/ None).await;
         self.latest_hard_refresh_codex_apps_tools_cache().await
     }
@@ -332,6 +343,12 @@ impl McpRuntime {
     async fn publish(&self, input: McpRuntimeInput, previous: Option<&McpConnectionSet>) {
         let (publish, publication_gate) = McpPublicationGate::pending();
         let config = Arc::clone(&input.config);
+        if self.current.load().config.is_none() {
+            self.selection
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active = config.server_selection.clone();
+        }
         let auth = input.auth.clone();
         let auth_token = auth.as_ref().and_then(|auth| auth.get_token().ok());
         let current = self.current.load_full();
@@ -421,12 +438,25 @@ impl McpRuntime {
         required_plugins: &HashSet<String>,
     ) -> Option<Arc<McpBinding>> {
         let current = self.current.load_full();
+        let required_servers = required_servers
+            .iter()
+            .cloned()
+            .chain(
+                current
+                    .config
+                    .as_ref()
+                    .and_then(|config| config.server_selection.as_ref())
+                    .into_iter()
+                    .flatten()
+                    .cloned(),
+            )
+            .collect::<Vec<_>>();
         current.connections.record_startup_readiness(
             "model_binding",
-            required_servers,
+            &required_servers,
             required_plugins,
         );
-        Self::binding_from_published_runtime(current, required_servers, required_plugins).await
+        Self::binding_from_published_runtime(current, &required_servers, required_plugins).await
     }
 
     async fn binding_from_published_runtime(

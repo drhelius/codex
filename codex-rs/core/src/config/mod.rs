@@ -870,6 +870,8 @@ pub struct Config {
 
     /// Definition for MCP servers that Codex can reach out to for tool calls.
     pub mcp_servers: Constrained<HashMap<String, McpServerConfig>>,
+    /// In-memory parent-turn availability, never loaded from or written to config.toml.
+    pub mcp_server_selection: Option<std::collections::HashSet<String>>,
 
     /// Trusted IdP shared by all permitted EMA MCP registrations.
     pub mcp_enterprise_managed_auth: Option<McpEnterpriseManagedAuthConfig>,
@@ -1809,6 +1811,7 @@ impl Config {
         }
 
         McpConfig {
+            server_selection: self.mcp_server_selection.clone(),
             chatgpt_base_url: self.chatgpt_base_url.clone(),
             apps_mcp_product_sku: self.apps_mcp_product_sku.clone(),
             requires_read_only_mcp_tools: false,
@@ -4313,6 +4316,7 @@ impl Config {
                 ),
             },
             mcp_servers,
+            mcp_server_selection: None,
             non_prefixed_mcp_tool_servers,
             mcp_enterprise_managed_auth,
             // The config.toml omits "_mode" because it's a config file. However, "_mode"

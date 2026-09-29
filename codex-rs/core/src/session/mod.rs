@@ -245,6 +245,7 @@ mod mcp;
 mod mcp_prewarm;
 mod mcp_refresh;
 mod mcp_runtime;
+mod mcp_selection;
 pub(crate) mod multi_agents;
 mod plugin_selection;
 mod realtime_history;

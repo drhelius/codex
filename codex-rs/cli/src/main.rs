@@ -113,7 +113,8 @@ use codex_terminal_detection::TerminalName;
 #[derive(Debug, Parser)]
 #[clap(
     author,
-    version,
+    version = concat!(env!("CARGO_PKG_VERSION"), "+gear"),
+    after_help = "Unofficial DrHelius fork with MCP server selection (codex-gear).",
     // If a sub‑command is given, ignore requirements of the default args.
     subcommand_negates_reqs = true,
     // The executable is sometimes invoked via a platform‑specific name like
@@ -1615,6 +1616,9 @@ async fn cli_main(
             print_completion(completion_cli);
         }
         Some(Subcommand::Update) => {
+            if option_env!("CODEX_GEAR_FORK").is_some() {
+                anyhow::bail!("Update codex-gear from https://github.com/drhelius/codex/releases");
+            }
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
                 root_remote_auth_token_env.as_deref(),

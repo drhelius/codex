@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "McpServerConnectionStatus": {
+      "enum": [
+        "notStarted",
+        "starting",
+        "connected",
+        "authenticationRequired",
+        "failed",
+        "cancelled",
+        "disabled"
+      ],
+      "type": "string"
+    },
+    "McpServerSelectionEntry": {
+      "properties": {
+        "connectionStatus": {
+          "$ref": "#/definitions/McpServerConnectionStatus"
+        },
+        "lockedReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "selected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "connectionStatus",
+        "name",
+        "selected"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "servers": {
+      "items": {
+        "$ref": "#/definitions/McpServerSelectionEntry"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "servers"
+  ],
+  "title": "McpServerSelectionResponse",
+  "type": "object"
+}

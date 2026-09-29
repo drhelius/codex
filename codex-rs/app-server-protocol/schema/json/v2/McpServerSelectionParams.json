@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Inspect or stage server availability for the next complete turn in a live thread.",
+  "properties": {
+    "selectedServers": {
+      "description": "Omit to inspect without side effects. An empty list deselects optional servers.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ],
+  "title": "McpServerSelectionParams",
+  "type": "object"
+}

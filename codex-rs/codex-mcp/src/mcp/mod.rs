@@ -122,6 +122,8 @@ pub struct McpPermissionPromptAutoApproveContext {
 /// runtime entry points such as [`effective_mcp_servers`].
 #[derive(Debug, Clone)]
 pub struct McpConfig {
+    /// Conversation-local user server availability; absent means configured defaults.
+    pub server_selection: Option<std::collections::HashSet<String>>,
     /// Base URL for ChatGPT-hosted app MCP servers, copied from the root config.
     pub chatgpt_base_url: String,
     /// Optional product SKU forwarded to the host-owned apps MCP server.
@@ -410,6 +412,14 @@ pub fn effective_mcp_servers_from_configured(
                 .mcp_server_catalog
                 .server(&name)
                 .expect("materialized MCP server must have a catalog registration");
+            if server.disabled_reason.is_some() {
+                server.enabled = false;
+            } else if matches!(registration.source(), McpServerSource::Config)
+                && !server.required
+                && let Some(selection) = &config.server_selection
+            {
+                server.enabled = selection.contains(&name);
+            }
             match server.auth.clone() {
                 McpServerAuth::ChatGpt => {
                     if !is_trusted_chatgpt_mcp_server(&server.transport, &config.chatgpt_base_url) {

@@ -995,6 +995,14 @@ impl CodexThread {
         self.session.refresh_mcp_config(next_config).await;
     }
 
+    /// Inspect or stage conversation-only MCP availability without starting servers.
+    pub async fn mcp_server_selection(
+        &self,
+        selected: Option<Vec<String>>,
+    ) -> anyhow::Result<Vec<codex_mcp::McpServerSelectionEntry>> {
+        self.session.mcp_server_selection(selected).await
+    }
+
     /// Refreshes this thread's Apps tools before returning their runtime state.
     pub async fn refresh_codex_apps_tools(
         &self,
@@ -1049,13 +1057,12 @@ impl CodexThread {
     /// Inspects one server through this thread's current MCP connection.
     pub async fn mcp_server_status_snapshot(
         &self,
-        server: &str,
+        server: Option<&str>,
         detail: codex_mcp::McpSnapshotDetail,
     ) -> anyhow::Result<(
         Arc<codex_mcp::McpConfig>,
         codex_mcp::McpServerStatusSnapshot,
     )> {
-        self.session.refresh_mcp_if_dirty().await;
         let runtime_context = self.session.current_mcp_runtime_context().await;
         self.session
             .services

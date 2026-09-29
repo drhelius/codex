@@ -7,6 +7,19 @@ use codex_protocol::mcp::McpServerConnectionStatus;
 use super::McpConnectionSet;
 
 impl McpConnectionSet {
+    pub(crate) async fn retained_connection_statuses(
+        &self,
+    ) -> HashMap<String, McpServerConnectionStatus> {
+        let mut statuses = self.connection_statuses().await;
+        for (name, view) in &self.retained_servers {
+            statuses.insert(
+                name.clone(),
+                view.connection.client.connection_status().await,
+            );
+        }
+        statuses
+    }
+
     pub(crate) async fn connection_statuses(&self) -> HashMap<String, McpServerConnectionStatus> {
         use McpServerConnectionStatus as Status;
 

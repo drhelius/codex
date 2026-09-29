@@ -2162,6 +2162,28 @@
       ],
       "type": "object"
     },
+    "McpServerSelectionParams": {
+      "description": "Inspect or stage server availability for the next complete turn in a live thread.",
+      "properties": {
+        "selectedServers": {
+          "description": "Omit to inspect without side effects. An empty list deselects optional servers.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId"
+      ],
+      "type": "object"
+    },
     "McpServerStatusDetail": {
       "enum": [
         "full",
@@ -7819,6 +7841,30 @@
         "params"
       ],
       "title": "McpServerStatus/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/mcp/selection"
+          ],
+          "title": "Thread/mcp/selectionRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/McpServerSelectionParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/mcp/selectionRequest",
       "type": "object"
     },
     {

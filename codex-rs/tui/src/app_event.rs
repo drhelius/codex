@@ -1059,6 +1059,14 @@ pub(crate) enum AppEvent {
     /// Abandon the post-install plugin app-auth flow.
     PluginInstallAuthAbandon,
 
+    OpenMcpSelection {
+        thread_id: ThreadId,
+    },
+    SetMcpSelection {
+        thread_id: ThreadId,
+        servers: Vec<String>,
+    },
+
     /// Fetch MCP inventory via app-server RPCs and render it into history.
     FetchMcpInventory {
         detail: McpServerStatusDetail,

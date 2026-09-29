@@ -209,6 +209,7 @@ pub(crate) struct MultiSelectPicker {
 
     /// Callback invoked when the user cancels the picker.
     on_cancel: Option<CancelCallback>,
+    locked_ids: std::collections::HashSet<String>,
 }
 
 impl MultiSelectPicker {
@@ -405,6 +406,9 @@ impl MultiSelectPicker {
             return;
         };
 
+        if self.locked_ids.contains(&item.id) {
+            return;
+        }
         item.enabled = !item.enabled;
         self.update_preview_line();
         if let Some(on_change) = &self.on_change {
@@ -713,6 +717,7 @@ pub(crate) struct MultiSelectPickerBuilder {
     on_change: Option<ChangeCallBack>,
     on_confirm: Option<ConfirmCallback>,
     on_cancel: Option<CancelCallback>,
+    locked_ids: std::collections::HashSet<String>,
 }
 
 impl MultiSelectPickerBuilder {
@@ -730,12 +735,19 @@ impl MultiSelectPickerBuilder {
             on_change: None,
             on_confirm: None,
             on_cancel: None,
+            locked_ids: Default::default(),
         }
     }
 
     /// Sets the list of selectable items.
     pub fn items(mut self, items: Vec<MultiSelectItem>) -> Self {
         self.items = items;
+        self
+    }
+
+    /// Keeps required or policy-controlled rows visible without permitting toggles.
+    pub fn locked_ids(mut self, ids: std::collections::HashSet<String>) -> Self {
+        self.locked_ids = ids;
         self
     }
 
@@ -852,6 +864,7 @@ impl MultiSelectPickerBuilder {
             on_change: self.on_change,
             on_confirm: self.on_confirm,
             on_cancel: self.on_cancel,
+            locked_ids: self.locked_ids,
         };
         view.apply_filter();
         view.update_preview_line();

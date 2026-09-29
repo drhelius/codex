@@ -1,0 +1,124 @@
+name: Fork Build
+run-name: Fork build ${{ inputs.release_id }} ${{ inputs.source_sha }} ${{ inputs.request }}
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Upstream release ID in the durable ledger
+        required: true
+        type: string
+      source_sha:
+        description: Exact candidate commit
+        required: true
+        type: string
+      request:
+        description: Persisted build request identity
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fork-build-${{ inputs.request }}
+  cancel-in-progress: false
+jobs:
+  policy:
+    if: github.repository == 'drhelius/codex' && github.ref == 'refs/heads/fork-main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install verified policy tools
+        run: python3 fork/scripts/tools.py "$RUNNER_TEMP/fork-tools"
+      - name: Compile consistency, workflow lint and maintenance fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 fork/scripts/check_policy.py "$RUNNER_TEMP/fork-tools"
+  build:
+    if: github.repository == 'drhelius/codex' && github.ref == 'refs/heads/fork-main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-15, target: aarch64-apple-darwin}
+          - {runner: macos-15-intel, target: x86_64-apple-darwin}
+          - {runner: ubuntu-24.04, target: x86_64-unknown-linux-musl}
+          - {runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl}
+          - {runner: windows-2025, target: x86_64-pc-windows-msvc}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    env:
+      TARGET: ${{ matrix.target }}
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_PROFILE_RELEASE_DEBUG: '0'
+      LIBSQLITE3_FLAGS: SQLITE_DISABLE_INTRINSIC
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: policy
+          persist-credentials: false
+      - name: Verify candidate identity before checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -I policy/fork/scripts/maintenance.py build-identity > identity.json
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify candidate policy and ancestry
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          POLICY_SHA: ${{ github.sha }}
+        run: |
+          cd source
+          python -c 'import os,sys; sys.path.insert(0,"../policy/fork/scripts"); from maintenance import verify_boundary; verify_boundary(os.environ["SOURCE_SHA"],os.environ["POLICY_SHA"])'
+          cp ../identity.json identity.json
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: gear-cargo-${{ matrix.target }}-${{ hashFiles('source/codex-rs/Cargo.lock') }}
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        if: runner.os == 'Linux'
+        with:
+          version: 0.14.0
+      - name: Install supported musl build tools
+        if: runner.os == 'Linux'
+        run: bash policy/.github/scripts/install-musl-build-tools.sh
+      - name: Install release toolchain and pinned test tools
+        run: |
+          cd source
+          python ../policy/fork/scripts/validate.py setup
+      - name: Selector gates and existing MCP regressions
+        run: |
+          cd source
+          python ../policy/fork/scripts/validate.py tests
+      - name: Build and smoke extracted distribution
+        run: |
+          cd source
+          python ../policy/fork/scripts/validate.py package
+      - name: Verify candidate remained intact
+        run: git -C source diff --exit-code
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gear-${{ matrix.target }}
+          path: source/gear-dist/*
+          if-no-files-found: error
+          retention-days: 30
