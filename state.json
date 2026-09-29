@@ -1,5 +1,17 @@
 {
   "schema": 1,
   "repository": "drhelius/codex",
-  "releases": []
+  "releases": [
+    {
+      "id": 398926954,
+      "tag": "rust-v0.159.0",
+      "upstream_sha": "687a119f0fcaace47e1f1abcc77cec6c813fd6da",
+      "published_at": "2026-09-29T08:05:42Z",
+      "revision": 1,
+      "branch": "fork-candidates/398926954-r1",
+      "status": "pending",
+      "attempts": 0,
+      "pr": null
+    }
+  ]
 }
