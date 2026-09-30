@@ -1,5 +1,16 @@
 # Bootstrap progress
 
+## V8 dependency-cache recovery
+
+- [x] Trace the missing native library to rust-cache pruning `gn_out` while retaining V8 build-script results.
+- [x] Restore the checksum-verified native archive before both build phases without clearing dependency caches.
+- [x] Reproduce and verify warm Cargo recovery in debug and release profiles without rerunning the cached build script.
+- [x] Pass 41 offline fixtures (two Windows-only skips), 24 upstream V8 checks, workflow lint and gh-aw consistency.
+- [x] Verify restoration and native Rust compilation with the actual checksum-pinned macOS ARM64 V8 archive.
+
+The additive recovery candidate retains the accepted repair and release identity.
+Actions reruns the complete macOS ARM64 release gates after the signed handoff.
+
 ## Stable 0.159.1 validation recovery
 
 - [x] Reproduce the startup announcement write with the exact 0.159.1 model catalog.
