@@ -67,7 +67,8 @@
       "repair_request": "a31ccfa51c3e4ec6a33abcc3c7c5d602",
       "reviewed": false,
       "request": "1c440c481cdf4aa795084d814c451164",
-      "build_run": 36709420460
+      "build_run": 36709420460,
+      "issue": 6
     }
   ]
 }
