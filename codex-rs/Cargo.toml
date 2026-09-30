@@ -158,11 +158,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-<<<<<<< 355dffc6f417b5c309aeeed63624b56a0db27b79
-version = "0.159.1"
-=======
 version = "0.159.2"
->>>>>>> ff6aec96948b70d94983af2641a6b67c94faeff5
 # Track the edition for all workspace crates in one place. Individual
 # crates can still override this value, but keeping it here means new
 # crates created with `cargo new -w ...` automatically inherit the 2024
