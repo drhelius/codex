@@ -55,7 +55,7 @@
       "published_at": "2026-09-29T23:57:16Z",
       "revision": 1,
       "branch": "fork-candidates/399607589-r1",
-      "status": "repairing",
+      "status": "blocked",
       "attempts": 2,
       "pr": 4,
       "base_sha": "355dffc6f417b5c309aeeed63624b56a0db27b79",
