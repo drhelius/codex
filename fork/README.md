@@ -142,8 +142,11 @@ of compiled from source on every runner. The pinned Rust cache action retains
 compiled external dependencies and Cargo downloads, including after failures,
 with separate keys for each platform, phase, compiler, build environment and lockfile.
 Workspace crates and test binaries are rebuilt, and Cargo still checks dependency
-fingerprints. The release retains upstream optimization and thin LTO. Test and
-release profiles compile concurrently on separate standard runners; four compiler
+fingerprints. Before each phase, the verified V8 archive is restored into its
+native output directory: the dependency cache prunes `gn_out` while retaining
+V8's build-script fingerprints. This preserves warm builds without clearing the
+rest of the dependency cache. The release retains upstream optimization and thin LTO.
+Test and release profiles compile concurrently on separate standard runners; four compiler
 jobs are allowed on the 14/16-GB runners and two on the 7-GB ARM Mac.
 The focused core selector harness reuses the original ten integration cases;
 the complete upstream suite keeps its original registration. The gate selects

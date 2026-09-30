@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unprivileged release gates and canonical upstream package assembly."""
 
+import gzip
 import hashlib
 import json
 import os
@@ -64,6 +65,26 @@ def setup():
     run("cargo", "nextest", "--version")
 
 
+def restore_v8_archive(archive, output, target):
+    # rusty_v8 stores its native archive outside Cargo's build-script OUT_DIR.
+    # rust-cache keeps the build-script fingerprints but prunes gn_out, so Cargo
+    # may not rerun that script. Rehydrate only the already-verified archive.
+    name = "rusty_v8.lib" if "windows" in target else "librusty_v8.a"
+    library = output / "gn_out" / "obj" / name
+    library.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with gzip.open(archive, "rb") as source:
+            with tempfile.NamedTemporaryFile(dir=library.parent, delete=False) as dest:
+                temporary = Path(dest.name)
+                shutil.copyfileobj(source, dest)
+        temporary.replace(library)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    print("Restored verified V8 native archive:", library, flush=True)
+
+
 def build_env(native=False):
     os.environ["CODEX_REPO_ROOT"] = str(ROOT)
     os.environ.setdefault("CARGO_PROFILE_DEV_DEBUG", "0")
@@ -80,7 +101,14 @@ def build_env(native=False):
     host = subprocess.check_output(["rustc", "-vV"], cwd=RS, text=True)
     host = next(line[6:] for line in host.splitlines() if line.startswith("host: "))
     target = TARGET or (host if native else default_target())
-    os.environ.update(resolve_codex_v8_cargo_env(TARGET_SPECS[target]))
+    v8_env = resolve_codex_v8_cargo_env(TARGET_SPECS[target])
+    os.environ.update(v8_env)
+    if v8_env:
+        output = RS / "target"
+        if TARGET or not native:
+            output /= target
+        output /= "debug" if native else "release"
+        restore_v8_archive(Path(v8_env["RUSTY_V8_ARCHIVE"]), output, target)
     return target
 
 
