@@ -55,9 +55,14 @@
       "published_at": "2026-09-29T23:57:16Z",
       "revision": 1,
       "branch": "fork-candidates/399607589-r1",
-      "status": "pending",
+      "status": "integrated",
       "attempts": 0,
-      "pr": null
+      "pr": null,
+      "base_sha": "355dffc6f417b5c309aeeed63624b56a0db27b79",
+      "policy_sha": "355dffc6f417b5c309aeeed63624b56a0db27b79",
+      "source_sha": "a1b730c6030ce8b29f11b9d83c13e092492e5f6e",
+      "integration_sha": "a1b730c6030ce8b29f11b9d83c13e092492e5f6e",
+      "conflicts": "100644 adceeb5ed9022d3e9d54fb1a780354c2385be6b7 1\tcodex-rs/Cargo.toml\n100644 2e8f64c28330dcfabdf66097d8bf458c3ed672b9 2\tcodex-rs/Cargo.toml\n100644 3bb85f05b295d1e59e9fab5fb26007d941709353 3\tcodex-rs/Cargo.toml\n\nAuto-merging codex-rs/Cargo.lock\nAuto-merging codex-rs/Cargo.toml\nCONFLICT (content): Merge conflict in codex-rs/Cargo.toml"
     }
   ]
 }
