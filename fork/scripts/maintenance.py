@@ -1259,9 +1259,10 @@ def main():
                 record and record.get("base_sha"),
                 "Prepare a candidate before selecting a source revision",
             )
-            git("fetch", "--no-tags", "origin", source, record["base_sha"])
-            verify_boundary(source, coordinator.ref())
-            for ancestor in (record["base_sha"], record["upstream_sha"]):
+            base = coordinator.ref()
+            git("fetch", "--no-tags", "origin", source, record["base_sha"], base)
+            verify_boundary(source, base)
+            for ancestor in (record["base_sha"], record["upstream_sha"], base):
                 require(
                     subprocess.run(
                         ["git", "merge-base", "--is-ancestor", ancestor, source]
@@ -1269,7 +1270,9 @@ def main():
                     == 0,
                     "Manual source lost release ancestry",
                 )
-            record.update(source_sha=source, reviewed=True)
+            record.update(
+                source_sha=source, base_sha=base, policy_sha=base, reviewed=True
+            )
             coordinator.push(source, record["branch"])
             coordinator.save()
             coordinator.build(record)
