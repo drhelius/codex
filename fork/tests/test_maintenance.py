@@ -460,6 +460,85 @@ class MaintenanceTests(unittest.TestCase):
             m.Coordinator.integrate(coordinator, original, retry_conflicts=True)
         self.assertEqual(coordinator.history, [])
 
+    def test_owner_source_uses_current_promotion_base_without_resetting_budget(self):
+        source, current = "d" * 40, "e" * 40
+        for includes_current in (False, True):
+            with (
+                self.subTest(includes_current=includes_current),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                row = record(status="blocked")
+                row.update(attempts=3, pr=3, reviewed=True)
+                original = copy.deepcopy(row)
+                coordinator = Harness([row])
+                event = Path(directory) / "event.json"
+                event.write_text(
+                    json.dumps(
+                        {
+                            "sender": {"login": "drhelius"},
+                            "inputs": {"source_sha": source},
+                        }
+                    )
+                )
+
+                def ancestry(args):
+                    self.assertEqual(args[:3], ["git", "merge-base", "--is-ancestor"])
+                    self.assertEqual(args[-1], source)
+                    return subprocess.CompletedProcess(
+                        args, int(args[-2] == current and not includes_current)
+                    )
+
+                with (
+                    patch.object(m, "Coordinator", return_value=coordinator),
+                    patch.object(coordinator, "load"),
+                    patch.object(coordinator, "discover"),
+                    patch.object(coordinator, "ref", return_value=current),
+                    patch.object(m, "git"),
+                    patch.object(m, "verify_boundary") as boundary,
+                    patch.object(m.subprocess, "run", side_effect=ancestry) as checked,
+                    patch.object(m.sys, "argv", ["maintenance.py", "coordinate"]),
+                    patch.dict(
+                        m.os.environ,
+                        {
+                            "GITHUB_REPOSITORY": m.REPO,
+                            "GITHUB_EVENT_PATH": str(event),
+                            "GITHUB_EVENT_NAME": "workflow_dispatch",
+                            "GITHUB_REF": "refs/heads/" + m.BRANCH,
+                        },
+                    ),
+                ):
+                    if includes_current:
+                        m.main()
+                    else:
+                        with self.assertRaisesRegex(
+                            RuntimeError, "lost release ancestry"
+                        ):
+                            m.main()
+                boundary.assert_called_once_with(source, current)
+                self.assertEqual(
+                    [call.args[0][-2] for call in checked.call_args_list],
+                    [B, A, current],
+                )
+                if includes_current:
+                    expected = dict(
+                        original,
+                        source_sha=source,
+                        base_sha=current,
+                        policy_sha=current,
+                        status="building",
+                        request=row["request"],
+                    )
+                    self.assertEqual(row, expected)
+                    self.assertIn(("push", source, row["branch"]), coordinator.history)
+                    self.assertTrue(
+                        coordinator.api.calls[-1][0].endswith(
+                            "fork-build.yml/dispatches"
+                        )
+                    )
+                else:
+                    self.assertEqual(row, original)
+                    self.assertEqual(coordinator.history, [])
+
     def test_cancelled_and_installer_failures_do_not_consume_repair_budget(self):
         for conclusion, step in (
             ("cancelled", "Selector gates and existing MCP regressions"),

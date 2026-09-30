@@ -35,6 +35,8 @@ suppress_unstable_features_warning = true
 analytics.enabled = false
 tui.disable_paste_burst = true
 tui.screen_reader_detection_done = true
+# Model announcement counters are unrelated to the MCP configuration invariant.
+tui.show_tooltips = false
 features.daemon_auto_start = true
 [model_providers.local_fixture]
 name = "Local fixture without inference"

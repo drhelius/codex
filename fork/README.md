@@ -186,7 +186,9 @@ draft mismatch: it records the old attempt as superseded by the owner's choice
 and preserves that draft/tag and repair budget, then validates a new revision before later releases.
 The owner can also provide an exact
 `source_sha` for an already-prepared pending release; ancestry and fork policy
-are checked before the full validation/build pipeline runs. Review automation changes on `fork-main` before
+are checked before the full validation/build pipeline runs. This source must include
+the current `fork-main` tip as well as the original release ancestry; that tip becomes
+the expected promotion base without resetting the repair budget. Review automation changes on `fork-main` before
 retrying; policy mismatches stop promotion. Rolling back an installation means
 selecting an older immutable archive, not rewriting Git history.
 

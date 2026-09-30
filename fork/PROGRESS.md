@@ -1,5 +1,14 @@
 # Bootstrap progress
 
+## Stable 0.159.1 validation recovery
+
+- [x] Reproduce the startup announcement write with the exact 0.159.1 model catalog.
+- [x] Disable unrelated tooltips only in the isolated TUI fixture; preserve all configuration, process and daemon assertions.
+- [x] Validate owner-selected recovery sources against the current promotion base and preserve the repair budget.
+- [x] Pass the native fixture, 37 offline fixtures (two Windows-only skips), workflow lint and gh-aw compilation consistency.
+
+Actions repeats the full macOS ARM64 release gates on the recovered candidate before publication.
+
 ## Manifest repair follow-up
 
 - [x] Permit focused Cargo manifest and lockfile repairs through PR safe outputs, with owner review.
