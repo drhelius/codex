@@ -45,6 +45,17 @@
       "reviewed": true,
       "request": "f8f8c6dc7c3942b8a0675e97f171d97c",
       "build_run": 36632185351
+    },
+    {
+      "id": 399607589,
+      "tag": "rust-v0.159.2",
+      "upstream_sha": "ff6aec96948b70d94983af2641a6b67c94faeff5",
+      "published_at": "2026-09-29T23:57:16Z",
+      "revision": 1,
+      "branch": "fork-candidates/399607589-r1",
+      "status": "pending",
+      "attempts": 0,
+      "pr": null
     }
   ]
 }
