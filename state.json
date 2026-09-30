@@ -55,7 +55,7 @@
       "published_at": "2026-09-29T23:57:16Z",
       "revision": 1,
       "branch": "fork-candidates/399607589-r1",
-      "status": "blocked",
+      "status": "building",
       "attempts": 2,
       "pr": 4,
       "base_sha": "355dffc6f417b5c309aeeed63624b56a0db27b79",
@@ -66,7 +66,7 @@
       "diagnostic": "Independent validation failed: https://github.com/drhelius/codex/actions/runs/36709420460; steps: Build and smoke extracted distribution, Selector gates and existing MCP regressions",
       "repair_request": "a31ccfa51c3e4ec6a33abcc3c7c5d602",
       "reviewed": true,
-      "request": "1c440c481cdf4aa795084d814c451164",
+      "request": "ffe88075eef7452180b8510c7d7e3f87",
       "build_run": 36709420460,
       "issue": 6
     }
