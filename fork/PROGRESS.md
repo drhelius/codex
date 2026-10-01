@@ -1,5 +1,17 @@
 # Bootstrap progress
 
+## Deterministic release-version integration
+
+- [x] Resolve only the exact workspace-version merge conflict, keeping other conflicts reviewable.
+- [x] Normalize every workspace lock entry before dispatching builds, including agent repairs and merged PRs.
+- [x] Preserve existing PRs, exact source ancestry, concurrent owner work and the repair budget.
+- [x] Add a read-only version gate before CI installs tools or restores build caches.
+- [x] Replay the actual 0.159.2 and 0.159.3 merges: each resolves the version conflict and synchronizes all 159 workspace packages without changing external dependencies.
+- [x] Pass 50 fixtures (two Windows-only skips), workflow lint and gh-aw compilation consistency.
+
+The automation change is prepared on a separate review branch so the active
+release build keeps its exact maintained-branch promotion base.
+
 ## Stable 0.159.2 lockfile and repair retry recovery
 
 - [x] Confirm 0.159.1 published successfully after the V8 cache fix.

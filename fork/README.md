@@ -66,7 +66,8 @@ The repair agent creates code through native `create-pull-request` and updates
 existing code through `push-to-pull-request-branch`; a PR metadata update alone
 is insufficient. Retries pin both code and metadata outputs to the ledger PR;
 creation is preview-only while that PR exists. A failure after its merge pauses
-for owner recovery instead of spending another attempt on a duplicate branch.
+for owner recovery if it still needs code changes after deterministic version
+normalization, instead of spending another attempt on a duplicate branch.
 The three-attempt budget persists across reruns. A no-change,
 platform/permission failure or exhausted budget leaves the same release pending
 and a diagnostic issue, avoiding repeated inference.
@@ -90,6 +91,14 @@ Upstream release tags currently leave path-package versions at `0.0.0` in
 workspace package versions with `workspace.package.version`; external package
 versions and checksums are preserved. No dependency resolver runs with write
 credentials. The repository's Bazel lock update is also checked at bootstrap.
+The integrator resolves a conflict only when it changes solely
+`workspace.package.version` from the maintained version to the exact stable
+release version; other manifest/source conflicts still require a repair PR.
+Before every build, the coordinator normalizes all workspace lock entries again,
+including newly added packages. A missing version update becomes an additive
+commit on the existing repair PR or candidate, without another agent attempt.
+Retries recover that exact commit after an interrupted state save and reject
+concurrent branch changes. CI independently checks versions before tool setup.
 
 ## gh-aw compilation
 
