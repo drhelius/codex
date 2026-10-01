@@ -62,6 +62,8 @@ class FakeAPI:
             return {"object": {"sha": B}}
         if "/commits/" in path:
             return {"sha": A}
+        if "/pulls/" in path:
+            return next(pr for pr in self.prs if path.endswith("/" + str(pr["number"])))
         if path.endswith("/issues"):
             return {"number": 7}
         if "/issues/" in path:
@@ -418,6 +420,36 @@ class MaintenanceTests(unittest.TestCase):
             coordinator.api.calls[-1][0].endswith("upstream-repair.lock.yml/dispatches")
         )
 
+    def test_repair_retry_targets_existing_open_pr_and_stops_after_merge(self):
+        row = record(status="building")
+        row.update(pr=4, attempts=1)
+        coordinator = Harness([row])
+        pr = {
+            "number": 4,
+            "state": "open",
+            "base": {"repo": {"full_name": m.REPO}, "ref": row["branch"]},
+            "head": {"repo": {"full_name": m.REPO}},
+        }
+        coordinator.api.prs = [pr]
+        coordinator.build_result(run(row, success=False))
+        self.assertEqual((row["status"], row["attempts"]), ("repairing", 2))
+        self.assertEqual(
+            coordinator.api.calls[-1][2]["inputs"]["pull_request_number"], "4"
+        )
+        before = len(coordinator.api.calls)
+        pr["state"] = "closed"
+        row.update(status="building", reviewed=True)
+        coordinator.build_result(run(row, success=False))
+        self.assertEqual(
+            (row["status"], row["attempts"], row["issue"]), ("blocked", 2, 7)
+        )
+        self.assertFalse(
+            any(
+                path.endswith("/dispatches")
+                for path, _, _ in coordinator.api.calls[before:]
+            )
+        )
+
     def test_owner_retry_refreshes_conflicts_without_building_them(self):
         row = record(status="blocked")
         row.update(conflicts="codex-rs/Cargo.toml", attempts=1)
@@ -635,10 +667,13 @@ class MaintenanceTests(unittest.TestCase):
 
     def test_lock_normalization_changes_only_workspace_package_versions(self):
         manifest = '[workspace.package]\nversion = "0.160.0"\n'
-        lock = 'version = 4\n\n[[package]]\nname = "codex"\nversion = "0.159.0"\n\n[[package]]\nname = "dependency"\nversion = "1.2.3"\nsource = "registry+https://example.invalid"\nchecksum = "abc"\n'
+        lock = 'version = 4\n\n[[package]]\nname = "codex"\nversion = "0.159.0"\n\n[[package]]\nname = "codex-utils-process"\nversion = "0.0.0"\n\n[[package]]\nname = "dependency"\nversion = "1.2.3"\nsource = "registry+https://example.invalid"\nchecksum = "abc"\n'
         normalized = m.normalize_workspace_lock(manifest, lock)
         self.assertEqual(
-            normalized, lock.replace('version = "0.159.0"', 'version = "0.160.0"')
+            normalized,
+            lock.replace('version = "0.159.0"', 'version = "0.160.0"').replace(
+                'version = "0.0.0"', 'version = "0.160.0"'
+            ),
         )
 
     def test_shell_and_path_inputs_are_validated(self):
@@ -902,6 +937,7 @@ class MaintenanceTests(unittest.TestCase):
                                 "release_id": str(row["id"]),
                                 "source_sha": source,
                                 "candidate_branch": row["branch"],
+                                "pull_request_number": "0",
                                 "request": row["repair_request"],
                             },
                         },

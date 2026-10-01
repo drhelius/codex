@@ -64,7 +64,10 @@ The trusted coordinator reports `fork/release-gates` on the exact source commit,
 so repair PRs show the independently dispatched validation result.
 The repair agent creates code through native `create-pull-request` and updates
 existing code through `push-to-pull-request-branch`; a PR metadata update alone
-is insufficient. The three-attempt budget persists across reruns. A no-change,
+is insufficient. Retries pin both code and metadata outputs to the ledger PR;
+creation is preview-only while that PR exists. A failure after its merge pauses
+for owner recovery instead of spending another attempt on a duplicate branch.
+The three-attempt budget persists across reruns. A no-change,
 platform/permission failure or exhausted budget leaves the same release pending
 and a diagnostic issue, avoiding repeated inference.
 

@@ -1,5 +1,16 @@
 # Bootstrap progress
 
+## Stable 0.159.2 lockfile and repair retry recovery
+
+- [x] Confirm 0.159.1 published successfully after the V8 cache fix.
+- [x] Identify the newly added workspace package left at 0.0.0 in the accepted 0.159.2 repair.
+- [x] Pin retry outputs to the existing PR and stop closed-PR retries before spending inference budget.
+- [x] Resolve all 1,472 packages with Rust 1.95.0 and `cargo metadata --locked`; external dependencies match upstream exactly.
+- [x] Run `just bazel-lock-update` with no Bazel lock drift; pass 42 fixtures (two Windows-only skips), workflow lint and gh-aw compilation.
+
+The signed additive recovery preserves the accepted PR, upstream ancestry and
+three-attempt budget. Actions owns the complete macOS ARM64 build after handoff.
+
 ## V8 dependency-cache recovery
 
 - [x] Trace the missing native library to rust-cache pruning `gn_out` while retaining V8 build-script results.
