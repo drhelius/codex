@@ -628,6 +628,24 @@ class Coordinator:
 
     def repair(self, record, reason):
         record["diagnostic"] = reason
+        if record.get("pr"):
+            pr = self.api.request(f"repos/{REPO}/pulls/{record['pr']}")
+            require(
+                pr["base"]["repo"]["full_name"] == REPO
+                and pr["head"]["repo"]["full_name"] == REPO
+                and pr["base"]["ref"] == record["branch"],
+                "Unexpected existing repair PR identity",
+            )
+            if pr["state"] != "open":
+                record["status"] = "blocked"
+                self.save()
+                self.issue(
+                    record,
+                    f"Repair PR #{record['pr']} is already closed or merged. "
+                    "Owner recovery is required; no duplicate PR or further inference. "
+                    + reason,
+                )
+                return
         if record["attempts"] >= BOOT["max_repair_attempts"]:
             record["status"] = "blocked"
             self.save()
@@ -645,6 +663,7 @@ class Coordinator:
                 "release_id": str(record["id"]),
                 "source_sha": record["source_sha"],
                 "candidate_branch": record["branch"],
+                "pull_request_number": str(record.get("pr") or 0),
                 "request": record["repair_request"],
             },
         )
@@ -900,6 +919,7 @@ class Coordinator:
                 }
                 if workflow != "fork-build.yml":
                     inputs["candidate_branch"] = record["branch"]
+                    inputs["pull_request_number"] = str(record.get("pr") or 0)
                 self.dispatch(workflow, inputs)
         else:
             print(f"noop: {record['tag']} remains {record['status']}")
@@ -1208,8 +1228,10 @@ def main():
             )
             require(
                 record["branch"] == inputs["candidate_branch"]
-                and record["attempts"] <= 3,
-                "Invalid repair branch/budget",
+                and record["attempts"] <= 3
+                and inputs.get("pull_request_number", "0")
+                == str(record.get("pr") or 0),
+                "Invalid repair branch, PR or budget",
             )
         print(json.dumps(record, indent=2))
         return

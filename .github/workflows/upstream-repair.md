@@ -17,6 +17,10 @@ on:
         description: Owned deterministic integration branch
         required: true
         type: string
+      pull_request_number:
+        description: Existing ledger PR to update, or 0 for the first repair
+        default: '0'
+        type: string
       request:
         description: Persisted repair request identity
         required: true
@@ -32,6 +36,9 @@ engine:
   id: copilot
   version: 1.0.80
 timeout-minutes: 55
+concurrency:
+  group: gh-aw-${{ github.workflow }}
+  queue: max
 jobs:
   notify:
     needs: [agent, safe_outputs]
@@ -82,6 +89,7 @@ safe-outputs:
   mentions: false
   allowed-github-references: []
   create-pull-request:
+    staged: ${{ inputs.pull_request_number != '0' }}
     title-prefix: 'MCP repair: ${{ inputs.release_id }} '
     base-branch: ${{ inputs.candidate_branch }}
     allowed-base-branches: ['${{ inputs.candidate_branch }}']
@@ -103,7 +111,7 @@ safe-outputs:
       - 'codex-rs/Cargo.lock'
       - 'MODULE.bazel.lock'
   push-to-pull-request-branch:
-    target: '*'
+    target: '${{ inputs.pull_request_number }}'
     required-title-prefix: 'MCP repair: ${{ inputs.release_id }} '
     required-labels: [fork-repair]
     max: 1
@@ -115,7 +123,7 @@ safe-outputs:
       - 'codex-rs/Cargo.lock'
       - 'MODULE.bazel.lock'
   update-pull-request:
-    target: '*'
+    target: '${{ inputs.pull_request_number }}'
     required-title-prefix: 'MCP repair: ${{ inputs.release_id }} '
     required-labels: [fork-repair]
     max: 1
@@ -157,7 +165,20 @@ re-merge, rebase, squash that baseline, edit state, or change workflow policy.
    Cargo manifests, `codex-rs/Cargo.lock` and `MODULE.bazel.lock` may change only
    as required to integrate this exact stable upstream release. For a workspace
    version conflict, use the version in the immutable upstream tag's manifest
-   and synchronize local package versions in Cargo.lock; preserve external
+   and synchronize every source-less package in Cargo.lock, including newly
+   added packages still at `0.0.0`; do not replace only the previous release
+   version. Use the trusted deterministic helper after resolving the manifest:
+
+   ```python
+   from pathlib import Path
+   import sys
+   sys.path.insert(0, "/tmp/gh-aw/agent/fork-policy/fork/scripts")
+   from maintenance import normalize_workspace_lock
+   lock = Path("codex-rs/Cargo.lock")
+   lock.write_text(normalize_workspace_lock(Path("codex-rs/Cargo.toml").read_text(), lock.read_text()))
+   ```
+
+   Preserve external
    dependency versions and checksums unless compatibility requires an explicit
    dependency repair. Regenerate lockfiles with the declared toolchain, including
    `just bazel-lock-update` when Cargo dependencies change. Do not change build
@@ -166,13 +187,18 @@ re-merge, rebase, squash that baseline, edit state, or change workflow policy.
    manifest conflict is actionable work, not a reason for `noop`. If a local
    check is unavailable, report it accurately in the PR and leave independent
    release gates mandatory; never claim an unrun check passed.
-5. Reuse the one existing PR recorded in the ledger. For a first repair, use
+5. The trusted input `pull_request_number` must match the ledger's `pr` (0 when
+   absent). If nonzero, first verify that PR is open and belongs to this release;
+   use only native `push_to_pull_request_branch` with that exact number, followed
+   by `update_pull_request`. Do not create or check out a new repair branch on a
+   retry. Creation is preview-only for retries and cannot push code. If the PR
+   is closed or merged, report the owner-recovery blocker with `noop` instead of
+   recreating its branch, reopening it, or creating another PR.
+   Only when the input is 0, use
    native `create_pull_request` targeting the exact candidate branch in
    `drhelius/codex`, with head `fork-repair/<release_id>-r<revision>`. This is a
    small additive repair on the already-pushed integration baseline, so gh-aw
-   must not transport the entire upstream merge. For a retry, use native
-   `push_to_pull_request_branch` to push code to that PR, then
-   `update_pull_request` for its body. A metadata update alone does not push code.
+   must not transport the entire upstream merge. A metadata update alone does not push code.
    Never create a second PR, target upstream, push directly, merge or publish.
 6. Include the upstream tag, exact upstream/base/integration/source SHAs, failed
    run URL, demonstrated cause, repair summary and actual command results in the

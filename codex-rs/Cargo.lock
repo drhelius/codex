@@ -5076,7 +5076,7 @@ dependencies = [
 
 [[package]]
 name = "codex-utils-process"
-version = "0.0.0"
+version = "0.159.2"
 dependencies = [
  "pretty_assertions",
  "tokio",
