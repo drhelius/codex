@@ -16,6 +16,7 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import maintenance as m
 import validate as v
+from check_policy import validate_workflow_queues
 
 A, B, C = "a" * 40, "b" * 40, "c" * 40
 
@@ -154,6 +155,10 @@ class Harness(m.Coordinator):
         # Lifecycle fixtures use symbolic SHAs. Native Git cases cover normalization.
         pass
 
+    def refresh_build_policy(self, row):
+        # Native Git fixtures exercise policy overlays and exact promotion bases.
+        pass
+
 
 def run(row, success=True):
     return {
@@ -266,6 +271,48 @@ class MaintenanceTests(unittest.TestCase):
                 m.API().request("fixture")
             self.assertEqual(opener.return_value.open.call_count, 1)
             sleep.assert_not_called()
+
+    def test_dns_read_recovery_is_bounded_and_writes_are_not_repeated(self):
+        error = m.urllib.error.URLError("Temporary failure in name resolution")
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"id": 42}'
+        with (
+            patch.object(m.urllib.request, "build_opener") as opener,
+            patch.object(m.time, "sleep"),
+        ):
+            opener.return_value.open.side_effect = [error, response]
+            self.assertEqual(m.API().request("fixture"), {"id": 42})
+            self.assertEqual(opener.return_value.open.call_count, 2)
+        for method, attempts in (("GET", 3), ("POST", 1), ("PATCH", 1), ("PUT", 1)):
+            with (
+                self.subTest(method=method),
+                patch.object(m.urllib.request, "build_opener") as opener,
+                patch.object(m.time, "sleep") as sleep,
+            ):
+                opener.return_value.open.side_effect = error
+                with self.assertRaises(m.urllib.error.URLError):
+                    m.API().request("fixture", method=method)
+                self.assertEqual(opener.return_value.open.call_count, attempts)
+                self.assertEqual(sleep.call_count, attempts - 1)
+
+    def test_queue_lint_exception_rejects_invalid_or_cancelling_configurations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "fork-coordinator.yml"
+            text = "concurrency:\n  group: fork-maintenance\n  queue: max\njobs:\n  fixture: {}\n"
+            path.write_text(text)
+            validate_workflow_queues(path)
+            for invalid in (
+                text.replace("queue: max", "queue: invalid"),
+                text.replace("queue: max", "queue: max\n  cancel-in-progress: true"),
+                text.replace("queue: max", "queue: max\n  queue: max"),
+                text.replace("  queue: max\n", "") + "  queue: max\n",
+            ):
+                with (
+                    self.subTest(text=invalid),
+                    self.assertRaisesRegex(RuntimeError, "Unexpected workflow queue"),
+                ):
+                    path.write_text(invalid)
+                    validate_workflow_queues(path)
 
     def test_completion_waits_for_authoritative_result_and_verifies_workflow(self):
         row = record(status="building")
@@ -579,6 +626,7 @@ class MaintenanceTests(unittest.TestCase):
         for conclusion, step in (
             ("cancelled", "Selector gates and existing MCP regressions"),
             ("failure", "Native installer lifecycle and integrity fixtures"),
+            ("failure", "Preserve Cargo build timings"),
         ):
             with self.subTest(conclusion=conclusion, step=step):
                 row = record(status="building")
@@ -589,6 +637,13 @@ class MaintenanceTests(unittest.TestCase):
                 with patch.object(coordinator.api, "pages", return_value=jobs):
                     coordinator.build_result(workflow)
                 self.assertEqual((row["status"], row["attempts"]), ("blocked", 0))
+                self.assertEqual(
+                    row["diagnostic"],
+                    "Independent validation failed: "
+                    + workflow["html_url"]
+                    + "; steps: "
+                    + step,
+                )
                 self.assertFalse(
                     any(
                         path.endswith("/dispatches")

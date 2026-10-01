@@ -9,6 +9,18 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def validate_workflow_queues(path):
+    text = path.read_text()
+    queues = re.findall(r"(?m)^\s*queue:.*$", text)
+    expected = ["  queue: max"] if path.name == "fork-coordinator.yml" else []
+    block = re.search(r"(?ms)^concurrency:\n(.*?)^jobs:", text)
+    if queues != expected or (
+        queues
+        and (not block or block[1].strip() != "group: fork-maintenance\n  queue: max")
+    ):
+        raise RuntimeError("Unexpected workflow queue configuration: " + str(path))
+
+
 def main():
     tools = Path(sys.argv[1]).resolve()
     paths = [
@@ -38,8 +50,19 @@ def main():
         ROOT / ".github/workflows/fork-build.yml",
         ROOT / ".github/workflows/fork-coordinator.yml",
     ]
+    # actionlint 1.7.12 predates GitHub's documented concurrency.queue support.
+    # Validate the exact supported FIFO setting before filtering only that error.
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency
+    for path in ordinary:
+        validate_workflow_queues(path)
     subprocess.run(
-        [str(tools / "actionlint"), "-shellcheck=", *map(str, ordinary)],
+        [
+            str(tools / "actionlint"),
+            "-shellcheck=",
+            "-ignore",
+            r'^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$',
+            *map(str, ordinary),
+        ],
         cwd=ROOT,
         check=True,
     )

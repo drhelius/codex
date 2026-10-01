@@ -112,7 +112,7 @@ class API:
                     result = response.read()
                 return result if binary else (json.loads(result) if result else None)
             except (
-                urllib.error.HTTPError,
+                urllib.error.URLError,
                 http.client.IncompleteRead,
                 ConnectionError,
                 TimeoutError,
@@ -596,8 +596,7 @@ class Coordinator:
             {
                 "state": state,
                 "context": "fork/release-gates",
-                "description": "Five-platform selector and distribution gates: "
-                + state,
+                "description": "Selector and distribution gates: " + state,
                 "target_url": url
                 or f"https://github.com/{REPO}/actions/workflows/fork-build.yml",
             },
@@ -605,14 +604,13 @@ class Coordinator:
 
     def build(self, record):
         require(record.get("source_sha"), "Missing exact build source")
+        self.refresh_build_policy(record)
         try:
             self.normalize_build_source(record)
         except (ValueError, KeyError) as error:
             self.repair(record, "Candidate version preflight failed: " + str(error))
             return
-        record.update(
-            status="building", request=uuid.uuid4().hex, policy_sha=self.ref()
-        )
+        record.update(status="building", request=uuid.uuid4().hex)
         self.save()  # Persist identity before dispatch; a retry can recover this exact request.
         self.status(record, "pending")
         self.dispatch(
@@ -624,6 +622,79 @@ class Coordinator:
             },
         )
 
+    def refresh_build_policy(self, record):
+        validate_record(record)
+        policy = self.ref()
+        if policy == record["policy_sha"]:
+            return
+        source = record["source_sha"]
+        git(
+            "fetch",
+            "--no-tags",
+            "origin",
+            source,
+            record["policy_sha"],
+            record["base_sha"],
+            policy,
+        )
+        verify_boundary(source, record["policy_sha"])
+        for ancestor, descendant in (
+            (record["base_sha"], policy),
+            (record["base_sha"], source),
+            (record["upstream_sha"], source),
+        ):
+            require(
+                subprocess.run(
+                    ["git", "merge-base", "--is-ancestor", ancestor, descendant]
+                ).returncode
+                == 0,
+                "Policy refresh would lose release ancestry",
+            )
+        changed = git("diff", "--name-only", record["base_sha"], policy).splitlines()
+        require(
+            all(
+                any(path == owned or path.startswith(owned + "/") for owned in BOUNDARY)
+                for path in changed
+            ),
+            "Maintained product code changed; prepare an explicitly reviewed source revision",
+        )
+        # Preserve the candidate's entire product tree, and overlay only trusted policy.
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / "index"))
+            subprocess.run(["git", "read-tree", source], env=env, check=True)
+            owned = [
+                path
+                for path in git("ls-tree", "-r", "--name-only", source).splitlines()
+                if any(
+                    path == boundary or path.startswith(boundary + "/")
+                    for boundary in BOUNDARY
+                )
+            ]
+            if owned:
+                subprocess.run(
+                    ["git", "update-index", "--force-remove", "--", *owned],
+                    env=env,
+                    check=True,
+                )
+            subprocess.run(
+                ["git", "update-index", "--index-info"],
+                input=git("ls-tree", "-r", policy, "--", *BOUNDARY) + "\n",
+                text=True,
+                env=env,
+                check=True,
+            )
+            tree = subprocess.check_output(
+                ["git", "write-tree"], env=env, text=True
+            ).strip()
+        updated = self.commit_candidate_tree(
+            record,
+            tree,
+            [source, policy],
+            f"Refresh trusted policy for {record['tag']}",
+        )
+        record.update(source_sha=updated, base_sha=policy, policy_sha=policy)
+        self.save()
+
     def normalize_build_source(self, record):
         validate_record(record)
         source = record["source_sha"]
@@ -634,18 +705,6 @@ class Coordinator:
         if normalized == lock:
             return
         verify_boundary(source, record["policy_sha"])
-        branch = record["branch"]
-        if record.get("pr") and not record.get("reviewed"):
-            pr = self.api.request(f"repos/{REPO}/pulls/{record['pr']}")
-            branch = pr["head"]["ref"]
-            require(
-                pr["state"] == "open"
-                and pr["base"]["repo"]["full_name"] == REPO
-                and pr["base"]["ref"] == record["branch"]
-                and pr["head"]["repo"]["full_name"] == REPO
-                and branch == f"fork-repair/{record['id']}-r{record['revision']}",
-                "Refuse to normalize an unrelated or closed repair PR",
-            )
         with tempfile.TemporaryDirectory() as directory:
             env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / "index"))
             subprocess.run(["git", "read-tree", source], env=env, check=True)
@@ -664,14 +723,36 @@ class Coordinator:
             tree = subprocess.check_output(
                 ["git", "write-tree"], env=env, text=True
             ).strip()
+        record["source_sha"] = self.commit_candidate_tree(
+            record,
+            tree,
+            [source],
+            f"Synchronize workspace lock versions for {record['tag']}",
+        )
+        self.save()
+
+    def commit_candidate_tree(self, record, tree, parents, subject):
+        source = record["source_sha"]
+        branch = record["branch"]
+        if record.get("pr") and not record.get("reviewed"):
+            pr = self.api.request(f"repos/{REPO}/pulls/{record['pr']}")
+            branch = pr["head"]["ref"]
+            require(
+                pr["state"] == "open"
+                and pr["base"]["repo"]["full_name"] == REPO
+                and pr["base"]["ref"] == record["branch"]
+                and pr["head"]["repo"]["full_name"] == REPO
+                and branch == f"fork-repair/{record['id']}-r{record['revision']}",
+                "Refuse to update an unrelated or closed repair PR",
+            )
         head = self.ref(branch)
         if head != source:
             git("fetch", "--no-tags", "origin", head)
             require(
                 git("rev-parse", head + "^{tree}") == tree
                 and git("rev-list", "--parents", "-n", "1", head).split()[1:]
-                == [source],
-                "Candidate changed; refusing to overwrite work during lock normalization",
+                == parents,
+                "Candidate changed; refusing to overwrite work during preparation",
             )
         else:
             env = dict(
@@ -688,17 +769,15 @@ class Coordinator:
                     "core.hooksPath=/dev/null",
                     "commit-tree",
                     tree,
-                    "-p",
-                    source,
+                    *[argument for parent in parents for argument in ("-p", parent)],
                     "-m",
-                    f"Synchronize workspace lock versions for {record['tag']}",
+                    subject,
                 ],
                 env=env,
                 text=True,
             ).strip()
             self.push(head, branch)
-        record["source_sha"] = head
-        self.save()
+        return head
 
     def issue(self, record, reason):
         body = f"Upstream `{record['tag']}` (`{record['upstream_sha']}`) remains pending.\n\n{reason}\n\nCandidate: `{record.get('source_sha', 'not prepared')}`. Repair attempts: {record['attempts']}/3.\n\nInspect [durable state](https://github.com/{REPO}/blob/{STATE_BRANCH}/state.json) and [Actions](https://github.com/{REPO}/actions). No release was replaced. An owner may retry through Fork Coordinator after resolving the cause."
@@ -872,6 +951,12 @@ class Coordinator:
                 for s in j.get("steps", [])
                 if s.get("conclusion") == "failure"
             ]
+            record["diagnostic"] = (
+                "Independent validation failed: "
+                + run["html_url"]
+                + "; steps: "
+                + (", ".join(failed) or run["conclusion"])
+            )
             if (
                 run["conclusion"] != "failure"
                 or not failed
@@ -887,15 +972,12 @@ class Coordinator:
                 self.issue(
                     record,
                     "Infrastructure, dependency setup, cancellation, or policy failure needs review; no repeated model calls. "
-                    + run["html_url"],
+                    + record["diagnostic"],
                 )
             else:
                 self.repair(
                     record,
-                    "Independent validation failed: "
-                    + run["html_url"]
-                    + "; steps: "
-                    + ", ".join(failed),
+                    record["diagnostic"],
                 )
             return
         if record.get("pr") and not record.get("reviewed"):

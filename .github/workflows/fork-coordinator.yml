@@ -30,7 +30,7 @@ on:
 permissions: {}
 concurrency:
   group: fork-maintenance
-  cancel-in-progress: false
+  queue: max
 jobs:
   coordinate:
     if: github.repository == 'drhelius/codex' && (github.event_name != 'pull_request' || (github.event.pull_request.merged && github.event.pull_request.head.repo.full_name == github.repository))

@@ -241,6 +241,133 @@ class ReleaseVersionTests(unittest.TestCase):
         self.assertEqual(checked.returncode, 0, checked.stderr)
         self.assertEqual(lock.read_text(), fixed)
 
+    def policy_update(self):
+        lock = Path("codex-rs/Cargo.lock")
+        lock.write_text(
+            versions.normalize_release_lock(
+                Path("codex-rs/Cargo.toml").read_text(),
+                lock.read_text(),
+                self.row["tag"],
+            )
+        )
+        Path("selector.rs").write_text("candidate selector\n")
+        self.real_git("commit", "-am", "candidate product changes")
+        candidate = self.real_git("rev-parse", "HEAD")
+        self.real_git("checkout", "-q", "--detach", self.source)
+        Path("fork/policy").unlink()
+        Path("fork/new-policy").write_text("reviewed policy update\n")
+        self.real_git("add", "-A")
+        self.real_git("commit", "-qm", "trusted policy changes")
+        policy = self.real_git("rev-parse", "HEAD")
+        self.heads.update({m.BRANCH: policy, self.row["branch"]: candidate})
+        self.row.update(source_sha=candidate, pr=4, reviewed=True)
+        self.enterContext(
+            patch.object(
+                self.coordinator,
+                "refresh_build_policy",
+                side_effect=lambda row: m.Coordinator.refresh_build_policy(
+                    self.coordinator, row
+                ),
+            )
+        )
+        return candidate, policy
+
+    def test_retry_refreshes_only_policy_and_dispatches_the_exact_merge(self):
+        candidate, policy = self.policy_update()
+        self.coordinator.build(self.row)
+        refreshed = self.row["source_sha"]
+        self.assertEqual(
+            self.real_git("rev-list", "--parents", "-n", "1", refreshed).split()[1:],
+            [candidate, policy],
+        )
+        self.assertEqual(
+            self.real_git("diff", "--name-only", candidate, refreshed).splitlines(),
+            ["fork/new-policy", "fork/policy"],
+        )
+        self.assertEqual(
+            self.real_git("show", refreshed + ":selector.rs"), "candidate selector"
+        )
+        m.verify_boundary(refreshed, policy)
+        self.assertEqual(
+            (
+                self.row["base_sha"],
+                self.row["policy_sha"],
+                self.row["attempts"],
+                self.row["reviewed"],
+            ),
+            (policy, policy, 2, True),
+        )
+        self.assertEqual(
+            self.coordinator.api.calls[-1][2]["inputs"]["source_sha"], refreshed
+        )
+        self.coordinator.refresh_build_policy(self.row)
+        self.assertEqual(self.pushes, [(refreshed, self.row["branch"])])
+
+    def test_policy_refresh_recovers_a_push_before_its_atomic_state_save(self):
+        _, policy = self.policy_update()
+        checkpoint = copy.deepcopy(self.row)
+        with patch.object(
+            self.coordinator, "save", side_effect=RuntimeError("interrupted")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                self.coordinator.refresh_build_policy(self.row)
+        refreshed = self.pushes[0][0]
+        self.row.clear()
+        self.row.update(checkpoint)
+        self.coordinator.refresh_build_policy(self.row)
+        self.assertEqual(
+            (self.row["source_sha"], self.row["base_sha"], self.row["policy_sha"]),
+            (refreshed, policy, policy),
+        )
+        self.assertEqual(self.pushes, [(refreshed, self.row["branch"])])
+
+    def test_policy_refresh_reuses_the_existing_open_pr_branch(self):
+        candidate, policy = self.policy_update()
+        branch = f"fork-repair/{self.row['id']}-r1"
+        self.heads[branch] = candidate
+        self.row["reviewed"] = False
+        self.coordinator.api.prs = [
+            {
+                "number": 4,
+                "state": "open",
+                "base": {"repo": {"full_name": m.REPO}, "ref": self.row["branch"]},
+                "head": {
+                    "repo": {"full_name": m.REPO},
+                    "ref": branch,
+                    "sha": candidate,
+                },
+            }
+        ]
+        self.coordinator.build(self.row)
+        self.assertEqual(self.pushes, [(self.row["source_sha"], branch)])
+        self.assertEqual(self.heads[self.row["branch"]], candidate)
+        self.assertEqual(
+            (self.row["policy_sha"], self.row["reviewed"]), (policy, False)
+        )
+
+    def test_policy_refresh_refuses_to_discard_new_product_changes_on_main(self):
+        candidate, _ = self.policy_update()
+        Path("selector.rs").write_text("new product code on main\n")
+        self.real_git("commit", "-am", "owner product change")
+        self.heads[m.BRANCH] = self.real_git("rev-parse", "HEAD")
+        with self.assertRaisesRegex(RuntimeError, "Maintained product code changed"):
+            self.coordinator.build(self.row)
+        self.assertEqual(
+            (self.row["source_sha"], self.pushes, self.coordinator.api.calls),
+            (candidate, [], []),
+        )
+
+    def test_policy_refresh_preserves_concurrent_candidate_work(self):
+        candidate, _ = self.policy_update()
+        self.real_git("checkout", "-q", "--detach", candidate)
+        Path("selector.rs").write_text("concurrent candidate work\n")
+        self.real_git("commit", "-am", "owner candidate change")
+        advanced = self.real_git("rev-parse", "HEAD")
+        self.heads[self.row["branch"]] = advanced
+        with self.assertRaisesRegex(RuntimeError, "refusing to overwrite"):
+            self.coordinator.build(self.row)
+        self.assertEqual((self.heads[self.row["branch"]], self.pushes), (advanced, []))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,8 +48,11 @@ Isolated final jobs explicitly dispatch completion from both the build and repai
 workflows. The coordinator verifies the exact run and waits up to five minutes
 for GitHub's authoritative completion status before processing its result.
 The existing `workflow_run` bridge is also idempotent, and the daily preflight
-recovers completed requests if a notification was missed. Explicit
-same-repository `workflow_dispatch` connects jobs written with `GITHUB_TOKEN`;
+recovers completed requests if a notification was missed. FIFO coordinator
+queuing retains simultaneous completion and owner-retry events.
+Read-only GitHub requests retry transient HTTP, connection and DNS failures up to
+three attempts; uncertain write operations are never automatically repeated.
+Explicit same-repository `workflow_dispatch` connects jobs written with `GITHUB_TOKEN`;
 the pipeline does not depend on token-generated push/PR/tag events. See
 [GitHub's documented event behavior](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 Only intended owned branches, workflow paths/IDs, ledger request IDs and exact
@@ -163,7 +166,9 @@ jobs are allowed on the 14/16-GB runners and two on the 7-GB ARM Mac.
 The focused core selector harness reuses the original ten integration cases;
 the complete upstream suite keeps its original registration. The gate selects
 the same 416 MCP/TUI cases without building unrelated integration binaries.
-Cargo timing reports are retained as diagnostic artifacts. Caches are used
+Cargo timing reports are best-effort diagnostic artifacts: an upload failure
+cannot cancel packaging or fail the release. Tests, package smoke checks and
+distribution asset uploads remain mandatory. Caches are used
 only by unprivileged build jobs. Privileged jobs
 restore no build cache and execute no candidate binaries/scripts.
 
@@ -192,8 +197,17 @@ no repair PR or candidate edits, an owner retry refreshes the integration agains
 current `fork-main` policy and invokes repair directly, without building known
 conflict markers. The previous candidate remains an additional parent; no branch
 is force-pushed and the repair budget is not reset. Existing PRs or unexpected
-candidate changes prevent this refresh. Artifacts remain for 30 days;
-expired artifacts require a new validated build/revision. For a corrected build
+candidate changes prevent this conflict refresh.
+
+Before a new build, a policy-only update to `fork-main` is incorporated through
+an additive candidate merge. The product source is preserved and all release
+gates run on the new exact commit. This also works after a repair PR was merged,
+without preparing a SHA manually or resetting the repair budget. Updates to
+product code on `fork-main`, unexpected candidate changes or modified protected
+files are rejected and require an explicitly reviewed source revision.
+
+Artifacts remain for 30 days; expired artifacts require a new validated
+build/revision. For a corrected build
 of a published release, explicitly supply its `release_id` and the next
 `revision` with an empty backlog. The same explicit revision operation can recover
 the first pending `publication_failed` entry after artifact expiration or a partial
