@@ -70,6 +70,7 @@ pre-agent-steps:
       git show origin/fork-main:fork/scripts/maintenance.py > /tmp/gh-aw/agent/fork-maintenance.py
       mkdir -p /tmp/gh-aw/agent/fork-policy/fork/scripts
       cp /tmp/gh-aw/agent/fork-maintenance.py /tmp/gh-aw/agent/fork-policy/fork/scripts/maintenance.py
+      git show origin/fork-main:fork/scripts/release_versions.py > /tmp/gh-aw/agent/fork-policy/fork/scripts/release_versions.py
       git show origin/fork-main:fork/bootstrap.json > /tmp/gh-aw/agent/fork-policy/fork/bootstrap.json
       python3 -I /tmp/gh-aw/agent/fork-policy/fork/scripts/maintenance.py repair-identity > /tmp/gh-aw/agent/fork-repair-identity.json
   - name: Install native Rust test prerequisites

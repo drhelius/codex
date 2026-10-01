@@ -134,6 +134,8 @@ jobs:
           cd source
           python -c 'import os,sys; sys.path.insert(0,"../policy/fork/scripts"); from maintenance import verify_boundary; verify_boundary(os.environ["SOURCE_SHA"],os.environ["POLICY_SHA"])'
           cp ../identity.json identity.json
+      - name: Verify candidate workspace lockfile before tool setup
+        run: python -I policy/fork/scripts/release_versions.py source
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         if: runner.os == 'Linux'
         with:

@@ -150,6 +150,10 @@ class Harness(m.Coordinator):
     def push(self, sha, branch):
         self.history.append(("push", sha, branch))
 
+    def normalize_build_source(self, row):
+        # Lifecycle fixtures use symbolic SHAs. Native Git cases cover normalization.
+        pass
+
 
 def run(row, success=True):
     return {
@@ -745,7 +749,7 @@ class MaintenanceTests(unittest.TestCase):
             Path("codex-rs").mkdir()
             Path(".github").mkdir()
             Path("codex-rs/Cargo.toml").write_text(
-                '[workspace.package]\nversion = "0.159.0"\n'
+                '[workspace.package]\nversion = "0.0.0"\n'
             )
             Path("codex-rs/Cargo.lock").write_text(
                 'version = 4\n[[package]]\nname = "local"\nversion = "0.0.0"\n'
@@ -757,6 +761,9 @@ class MaintenanceTests(unittest.TestCase):
             base = git("rev-parse", "HEAD")
             Path(".github/policy").write_text("fork policy")
             Path("selector.rs").write_text("fork selector")
+            Path("codex-rs/Cargo.toml").write_text(
+                '[workspace.package]\nversion = "0.159.0"\n'
+            )
             git("commit", "-am", "fork")
             fork = git("rev-parse", "HEAD")
             git("checkout", "-q", "--detach", base)
@@ -764,6 +771,8 @@ class MaintenanceTests(unittest.TestCase):
             Path("codex-rs/Cargo.toml").write_text(
                 '[workspace.package]\nversion = "0.160.0"\n'
             )
+            with Path("codex-rs/Cargo.lock").open("a") as lock:
+                lock.write('[[package]]\nname = "new-package"\nversion = "0.0.0"\n')
             git("commit", "-am", "upstream")
             real_git = m.git
             for conflict in (False, True):
@@ -820,7 +829,9 @@ class MaintenanceTests(unittest.TestCase):
             Path("codex-rs").mkdir()
             Path(".github").mkdir()
             manifest = Path("codex-rs/Cargo.toml")
-            manifest.write_text('[workspace.package]\nversion = "0.0.0"\n')
+            manifest.write_text(
+                '[workspace.package]\nversion = "0.0.0"\ndescription = "base"\n'
+            )
             Path("codex-rs/Cargo.lock").write_text(
                 'version = 4\n[[package]]\nname = "local"\nversion = "0.0.0"\n'
             )
@@ -828,12 +839,16 @@ class MaintenanceTests(unittest.TestCase):
             real_git("add", ".")
             real_git("commit", "-qm", "baseline")
             baseline = real_git("rev-parse", "HEAD")
-            manifest.write_text('[workspace.package]\nversion = "0.159.0"\n')
+            manifest.write_text(
+                '[workspace.package]\nversion = "0.159.0"\ndescription = "fork"\n'
+            )
             Path(".github/policy").write_text("old fork policy")
             real_git("commit", "-am", "fork")
             fork = real_git("rev-parse", "HEAD")
             real_git("checkout", "-q", "--detach", baseline)
-            manifest.write_text('[workspace.package]\nversion = "0.159.1"\n')
+            manifest.write_text(
+                '[workspace.package]\nversion = "0.159.1"\ndescription = "upstream"\n'
+            )
             real_git("commit", "-am", "stable upstream release")
             upstream = real_git("rev-parse", "HEAD")
             row = record(m.BOOT["release_id"] + 1)
