@@ -69,6 +69,17 @@
       "request": "ffe88075eef7452180b8510c7d7e3f87",
       "build_run": 36788223091,
       "issue": 6
+    },
+    {
+      "id": 400492869,
+      "tag": "rust-v0.159.3",
+      "upstream_sha": "01fc69f4026735edfdf6789820549727a4867b11",
+      "published_at": "2026-09-30T22:57:34Z",
+      "revision": 1,
+      "branch": "fork-candidates/400492869-r1",
+      "status": "pending",
+      "attempts": 0,
+      "pr": null
     }
   ]
 }
