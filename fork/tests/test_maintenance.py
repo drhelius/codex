@@ -16,6 +16,7 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import maintenance as m
 import validate as v
+from check_policy import validate_workflow_queues
 
 A, B, C = "a" * 40, "b" * 40, "c" * 40
 
@@ -150,6 +151,14 @@ class Harness(m.Coordinator):
     def push(self, sha, branch):
         self.history.append(("push", sha, branch))
 
+    def normalize_build_source(self, row):
+        # Lifecycle fixtures use symbolic SHAs. Native Git cases cover normalization.
+        pass
+
+    def refresh_build_policy(self, row):
+        # Native Git fixtures exercise policy overlays and exact promotion bases.
+        pass
+
 
 def run(row, success=True):
     return {
@@ -262,6 +271,48 @@ class MaintenanceTests(unittest.TestCase):
                 m.API().request("fixture")
             self.assertEqual(opener.return_value.open.call_count, 1)
             sleep.assert_not_called()
+
+    def test_dns_read_recovery_is_bounded_and_writes_are_not_repeated(self):
+        error = m.urllib.error.URLError("Temporary failure in name resolution")
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"id": 42}'
+        with (
+            patch.object(m.urllib.request, "build_opener") as opener,
+            patch.object(m.time, "sleep"),
+        ):
+            opener.return_value.open.side_effect = [error, response]
+            self.assertEqual(m.API().request("fixture"), {"id": 42})
+            self.assertEqual(opener.return_value.open.call_count, 2)
+        for method, attempts in (("GET", 3), ("POST", 1), ("PATCH", 1), ("PUT", 1)):
+            with (
+                self.subTest(method=method),
+                patch.object(m.urllib.request, "build_opener") as opener,
+                patch.object(m.time, "sleep") as sleep,
+            ):
+                opener.return_value.open.side_effect = error
+                with self.assertRaises(m.urllib.error.URLError):
+                    m.API().request("fixture", method=method)
+                self.assertEqual(opener.return_value.open.call_count, attempts)
+                self.assertEqual(sleep.call_count, attempts - 1)
+
+    def test_queue_lint_exception_rejects_invalid_or_cancelling_configurations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "fork-coordinator.yml"
+            text = "concurrency:\n  group: fork-maintenance\n  queue: max\njobs:\n  fixture: {}\n"
+            path.write_text(text)
+            validate_workflow_queues(path)
+            for invalid in (
+                text.replace("queue: max", "queue: invalid"),
+                text.replace("queue: max", "queue: max\n  cancel-in-progress: true"),
+                text.replace("queue: max", "queue: max\n  queue: max"),
+                text.replace("  queue: max\n", "") + "  queue: max\n",
+            ):
+                with (
+                    self.subTest(text=invalid),
+                    self.assertRaisesRegex(RuntimeError, "Unexpected workflow queue"),
+                ):
+                    path.write_text(invalid)
+                    validate_workflow_queues(path)
 
     def test_completion_waits_for_authoritative_result_and_verifies_workflow(self):
         row = record(status="building")
@@ -575,6 +626,7 @@ class MaintenanceTests(unittest.TestCase):
         for conclusion, step in (
             ("cancelled", "Selector gates and existing MCP regressions"),
             ("failure", "Native installer lifecycle and integrity fixtures"),
+            ("failure", "Preserve Cargo build timings"),
         ):
             with self.subTest(conclusion=conclusion, step=step):
                 row = record(status="building")
@@ -585,6 +637,13 @@ class MaintenanceTests(unittest.TestCase):
                 with patch.object(coordinator.api, "pages", return_value=jobs):
                     coordinator.build_result(workflow)
                 self.assertEqual((row["status"], row["attempts"]), ("blocked", 0))
+                self.assertEqual(
+                    row["diagnostic"],
+                    "Independent validation failed: "
+                    + workflow["html_url"]
+                    + "; steps: "
+                    + step,
+                )
                 self.assertFalse(
                     any(
                         path.endswith("/dispatches")
@@ -745,7 +804,7 @@ class MaintenanceTests(unittest.TestCase):
             Path("codex-rs").mkdir()
             Path(".github").mkdir()
             Path("codex-rs/Cargo.toml").write_text(
-                '[workspace.package]\nversion = "0.159.0"\n'
+                '[workspace.package]\nversion = "0.0.0"\n'
             )
             Path("codex-rs/Cargo.lock").write_text(
                 'version = 4\n[[package]]\nname = "local"\nversion = "0.0.0"\n'
@@ -757,6 +816,9 @@ class MaintenanceTests(unittest.TestCase):
             base = git("rev-parse", "HEAD")
             Path(".github/policy").write_text("fork policy")
             Path("selector.rs").write_text("fork selector")
+            Path("codex-rs/Cargo.toml").write_text(
+                '[workspace.package]\nversion = "0.159.0"\n'
+            )
             git("commit", "-am", "fork")
             fork = git("rev-parse", "HEAD")
             git("checkout", "-q", "--detach", base)
@@ -764,6 +826,8 @@ class MaintenanceTests(unittest.TestCase):
             Path("codex-rs/Cargo.toml").write_text(
                 '[workspace.package]\nversion = "0.160.0"\n'
             )
+            with Path("codex-rs/Cargo.lock").open("a") as lock:
+                lock.write('[[package]]\nname = "new-package"\nversion = "0.0.0"\n')
             git("commit", "-am", "upstream")
             real_git = m.git
             for conflict in (False, True):
@@ -820,7 +884,9 @@ class MaintenanceTests(unittest.TestCase):
             Path("codex-rs").mkdir()
             Path(".github").mkdir()
             manifest = Path("codex-rs/Cargo.toml")
-            manifest.write_text('[workspace.package]\nversion = "0.0.0"\n')
+            manifest.write_text(
+                '[workspace.package]\nversion = "0.0.0"\ndescription = "base"\n'
+            )
             Path("codex-rs/Cargo.lock").write_text(
                 'version = 4\n[[package]]\nname = "local"\nversion = "0.0.0"\n'
             )
@@ -828,12 +894,16 @@ class MaintenanceTests(unittest.TestCase):
             real_git("add", ".")
             real_git("commit", "-qm", "baseline")
             baseline = real_git("rev-parse", "HEAD")
-            manifest.write_text('[workspace.package]\nversion = "0.159.0"\n')
+            manifest.write_text(
+                '[workspace.package]\nversion = "0.159.0"\ndescription = "fork"\n'
+            )
             Path(".github/policy").write_text("old fork policy")
             real_git("commit", "-am", "fork")
             fork = real_git("rev-parse", "HEAD")
             real_git("checkout", "-q", "--detach", baseline)
-            manifest.write_text('[workspace.package]\nversion = "0.159.1"\n')
+            manifest.write_text(
+                '[workspace.package]\nversion = "0.159.1"\ndescription = "upstream"\n'
+            )
             real_git("commit", "-am", "stable upstream release")
             upstream = real_git("rev-parse", "HEAD")
             row = record(m.BOOT["release_id"] + 1)

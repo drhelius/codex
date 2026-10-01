@@ -1,5 +1,30 @@
 # Bootstrap progress
 
+## Diagnostic uploads and policy-aware recovery
+
+- [x] Make optional Cargo timing uploads non-blocking; keep real tests and release assets mandatory.
+- [x] Refresh only owner-reviewed policy on a pending candidate before rebuilding, preserving product source and ancestry.
+- [x] Reuse the existing candidate/PR and preserve recovery commits after interrupted state saves.
+- [x] Record the actual latest failed step instead of retaining a stale diagnostic.
+- [x] Queue all coordinator events and retry transient DNS failures only for read-only GitHub requests.
+- [x] Pass 57 fixtures (two Windows-only skips), workflow lint and pinned gh-aw compilation consistency.
+- [x] Replay the actual blocked 0.159.2 ledger in isolation: normal owner retry preserves product code, release identity and budget while preparing the exact policy merge.
+
+The pending release is resumed through the ordinary owner retry after this
+source checkpoint. Actions owns the complete build, validation and publication.
+
+## Deterministic release-version integration
+
+- [x] Resolve only the exact workspace-version merge conflict, keeping other conflicts reviewable.
+- [x] Normalize every workspace lock entry before dispatching builds, including agent repairs and merged PRs.
+- [x] Preserve existing PRs, exact source ancestry, concurrent owner work and the repair budget.
+- [x] Add a read-only version gate before CI installs tools or restores build caches.
+- [x] Replay the actual 0.159.2 and 0.159.3 merges: each resolves the version conflict and synchronizes all 159 workspace packages without changing external dependencies.
+- [x] Pass 50 fixtures (two Windows-only skips), workflow lint and gh-aw compilation consistency.
+
+The automation change is prepared on a separate review branch so the active
+release build keeps its exact maintained-branch promotion base.
+
 ## Stable 0.159.2 lockfile and repair retry recovery
 
 - [x] Confirm 0.159.1 published successfully after the V8 cache fix.

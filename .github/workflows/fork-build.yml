@@ -134,6 +134,8 @@ jobs:
           cd source
           python -c 'import os,sys; sys.path.insert(0,"../policy/fork/scripts"); from maintenance import verify_boundary; verify_boundary(os.environ["SOURCE_SHA"],os.environ["POLICY_SHA"])'
           cp ../identity.json identity.json
+      - name: Verify candidate workspace lockfile before tool setup
+        run: python -I policy/fork/scripts/release_versions.py source
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         if: runner.os == 'Linux'
         with:
@@ -174,6 +176,7 @@ jobs:
           retention-days: 30
       - name: Preserve Cargo build timings
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: timings-${{ matrix.target }}-${{ matrix.phase }}

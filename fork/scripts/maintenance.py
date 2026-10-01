@@ -20,6 +20,12 @@ import urllib.request
 import uuid
 import zipfile
 
+# -I excludes cwd and script imports; load only this checkout's trusted helpers.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from release_versions import normalize_release_lock
+from release_versions import normalize_workspace_lock
+from release_versions import resolve_workspace_version_conflict
+
 REPO = "drhelius/codex"
 UPSTREAM = "openai/codex"
 BRANCH = "fork-main"
@@ -106,7 +112,7 @@ class API:
                     result = response.read()
                 return result if binary else (json.loads(result) if result else None)
             except (
-                urllib.error.HTTPError,
+                urllib.error.URLError,
                 http.client.IncompleteRead,
                 ConnectionError,
                 TimeoutError,
@@ -198,25 +204,6 @@ def validate_record(record):
     for name in ("source_sha", "base_sha", "policy_sha"):
         if record.get(name):
             require(SHA.fullmatch(record[name]), f"Invalid {name}")
-
-
-def normalize_workspace_lock(manifest, lock):
-    version = tomllib.loads(manifest)["workspace"]["package"]["version"]
-    require(
-        re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?", version),
-        "Invalid workspace version",
-    )
-    sections = lock.split("[[package]]")
-    for index in range(1, len(sections)):
-        package = tomllib.loads("[[package]]" + sections[index])["package"][0]
-        if "source" not in package:
-            sections[index] = re.sub(
-                r'(?m)^version = "[^"\n]+"$',
-                'version = "' + version + '"',
-                sections[index],
-                count=1,
-            )
-    return "[[package]]".join(sections)
 
 
 def release_tag(record):
@@ -446,6 +433,7 @@ class Coordinator:
             )
             tree = merged.stdout.splitlines()[0]
             require(SHA.fullmatch(tree), "Merge did not produce a tree")
+            resolved_paths = set()
             # Use a temporary index. Never check out or run upstream/candidate scripts in this job.
             with tempfile.TemporaryDirectory() as directory:
                 env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / "index"))
@@ -472,8 +460,30 @@ class Coordinator:
                 )
                 try:
                     manifest = git("show", tree + ":codex-rs/Cargo.toml")
+                    resolved = resolve_workspace_version_conflict(
+                        manifest,
+                        current_version=tomllib.loads(
+                            git("show", base + ":codex-rs/Cargo.toml")
+                        )["workspace"]["package"]["version"],
+                        upstream_version=record["tag"][6:],
+                    )
+                    if resolved is not None:
+                        manifest = resolved
+                        blob = git("hash-object", "-w", "--stdin", data=manifest)
+                        subprocess.run(
+                            [
+                                "git",
+                                "update-index",
+                                "--add",
+                                "--cacheinfo",
+                                "100644," + blob + ",codex-rs/Cargo.toml",
+                            ],
+                            env=env,
+                            check=True,
+                        )
+                        resolved_paths.add("codex-rs/Cargo.toml")
                     lock = git("show", tree + ":codex-rs/Cargo.lock") + "\n"
-                    normalized = normalize_workspace_lock(manifest, lock)
+                    normalized = normalize_release_lock(manifest, lock, record["tag"])
                     if normalized != lock:
                         blob = git("hash-object", "-w", "--stdin", data=normalized)
                         subprocess.run(
@@ -487,7 +497,7 @@ class Coordinator:
                             env=env,
                             check=True,
                         )
-                except (tomllib.TOMLDecodeError, KeyError):
+                except (ValueError, KeyError):
                     # Real manifest conflicts remain visible and require owner review.
                     pass
                 tree = subprocess.check_output(
@@ -501,7 +511,8 @@ class Coordinator:
             source_conflicts = [
                 path
                 for path in unmerged
-                if not any(path == b or path.startswith(b + "/") for b in BOUNDARY)
+                if path not in resolved_paths
+                and not any(path == b or path.startswith(b + "/") for b in BOUNDARY)
             ]
             conflicts = (
                 merged.stdout.splitlines()[1:]
@@ -585,8 +596,7 @@ class Coordinator:
             {
                 "state": state,
                 "context": "fork/release-gates",
-                "description": "Five-platform selector and distribution gates: "
-                + state,
+                "description": "Selector and distribution gates: " + state,
                 "target_url": url
                 or f"https://github.com/{REPO}/actions/workflows/fork-build.yml",
             },
@@ -594,9 +604,13 @@ class Coordinator:
 
     def build(self, record):
         require(record.get("source_sha"), "Missing exact build source")
-        record.update(
-            status="building", request=uuid.uuid4().hex, policy_sha=self.ref()
-        )
+        self.refresh_build_policy(record)
+        try:
+            self.normalize_build_source(record)
+        except (ValueError, KeyError) as error:
+            self.repair(record, "Candidate version preflight failed: " + str(error))
+            return
+        record.update(status="building", request=uuid.uuid4().hex)
         self.save()  # Persist identity before dispatch; a retry can recover this exact request.
         self.status(record, "pending")
         self.dispatch(
@@ -607,6 +621,163 @@ class Coordinator:
                 "request": record["request"],
             },
         )
+
+    def refresh_build_policy(self, record):
+        validate_record(record)
+        policy = self.ref()
+        if policy == record["policy_sha"]:
+            return
+        source = record["source_sha"]
+        git(
+            "fetch",
+            "--no-tags",
+            "origin",
+            source,
+            record["policy_sha"],
+            record["base_sha"],
+            policy,
+        )
+        verify_boundary(source, record["policy_sha"])
+        for ancestor, descendant in (
+            (record["base_sha"], policy),
+            (record["base_sha"], source),
+            (record["upstream_sha"], source),
+        ):
+            require(
+                subprocess.run(
+                    ["git", "merge-base", "--is-ancestor", ancestor, descendant]
+                ).returncode
+                == 0,
+                "Policy refresh would lose release ancestry",
+            )
+        changed = git("diff", "--name-only", record["base_sha"], policy).splitlines()
+        require(
+            all(
+                any(path == owned or path.startswith(owned + "/") for owned in BOUNDARY)
+                for path in changed
+            ),
+            "Maintained product code changed; prepare an explicitly reviewed source revision",
+        )
+        # Preserve the candidate's entire product tree, and overlay only trusted policy.
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / "index"))
+            subprocess.run(["git", "read-tree", source], env=env, check=True)
+            owned = [
+                path
+                for path in git("ls-tree", "-r", "--name-only", source).splitlines()
+                if any(
+                    path == boundary or path.startswith(boundary + "/")
+                    for boundary in BOUNDARY
+                )
+            ]
+            if owned:
+                subprocess.run(
+                    ["git", "update-index", "--force-remove", "--", *owned],
+                    env=env,
+                    check=True,
+                )
+            subprocess.run(
+                ["git", "update-index", "--index-info"],
+                input=git("ls-tree", "-r", policy, "--", *BOUNDARY) + "\n",
+                text=True,
+                env=env,
+                check=True,
+            )
+            tree = subprocess.check_output(
+                ["git", "write-tree"], env=env, text=True
+            ).strip()
+        updated = self.commit_candidate_tree(
+            record,
+            tree,
+            [source, policy],
+            f"Refresh trusted policy for {record['tag']}",
+        )
+        record.update(source_sha=updated, base_sha=policy, policy_sha=policy)
+        self.save()
+
+    def normalize_build_source(self, record):
+        validate_record(record)
+        source = record["source_sha"]
+        git("fetch", "--no-tags", "origin", source)
+        manifest = git("show", source + ":codex-rs/Cargo.toml")
+        lock = git("show", source + ":codex-rs/Cargo.lock") + "\n"
+        normalized = normalize_release_lock(manifest, lock, record["tag"])
+        if normalized == lock:
+            return
+        verify_boundary(source, record["policy_sha"])
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / "index"))
+            subprocess.run(["git", "read-tree", source], env=env, check=True)
+            blob = git("hash-object", "-w", "--stdin", data=normalized)
+            subprocess.run(
+                [
+                    "git",
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    "100644," + blob + ",codex-rs/Cargo.lock",
+                ],
+                env=env,
+                check=True,
+            )
+            tree = subprocess.check_output(
+                ["git", "write-tree"], env=env, text=True
+            ).strip()
+        record["source_sha"] = self.commit_candidate_tree(
+            record,
+            tree,
+            [source],
+            f"Synchronize workspace lock versions for {record['tag']}",
+        )
+        self.save()
+
+    def commit_candidate_tree(self, record, tree, parents, subject):
+        source = record["source_sha"]
+        branch = record["branch"]
+        if record.get("pr") and not record.get("reviewed"):
+            pr = self.api.request(f"repos/{REPO}/pulls/{record['pr']}")
+            branch = pr["head"]["ref"]
+            require(
+                pr["state"] == "open"
+                and pr["base"]["repo"]["full_name"] == REPO
+                and pr["base"]["ref"] == record["branch"]
+                and pr["head"]["repo"]["full_name"] == REPO
+                and branch == f"fork-repair/{record['id']}-r{record['revision']}",
+                "Refuse to update an unrelated or closed repair PR",
+            )
+        head = self.ref(branch)
+        if head != source:
+            git("fetch", "--no-tags", "origin", head)
+            require(
+                git("rev-parse", head + "^{tree}") == tree
+                and git("rev-list", "--parents", "-n", "1", head).split()[1:]
+                == parents,
+                "Candidate changed; refusing to overwrite work during preparation",
+            )
+        else:
+            env = dict(
+                os.environ,
+                GIT_AUTHOR_NAME="github-actions[bot]",
+                GIT_AUTHOR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com",
+                GIT_COMMITTER_NAME="github-actions[bot]",
+                GIT_COMMITTER_EMAIL="41898282+github-actions[bot]@users.noreply.github.com",
+            )
+            head = subprocess.check_output(
+                [
+                    "git",
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "commit-tree",
+                    tree,
+                    *[argument for parent in parents for argument in ("-p", parent)],
+                    "-m",
+                    subject,
+                ],
+                env=env,
+                text=True,
+            ).strip()
+            self.push(head, branch)
+        return head
 
     def issue(self, record, reason):
         body = f"Upstream `{record['tag']}` (`{record['upstream_sha']}`) remains pending.\n\n{reason}\n\nCandidate: `{record.get('source_sha', 'not prepared')}`. Repair attempts: {record['attempts']}/3.\n\nInspect [durable state](https://github.com/{REPO}/blob/{STATE_BRANCH}/state.json) and [Actions](https://github.com/{REPO}/actions). No release was replaced. An owner may retry through Fork Coordinator after resolving the cause."
@@ -780,6 +951,12 @@ class Coordinator:
                 for s in j.get("steps", [])
                 if s.get("conclusion") == "failure"
             ]
+            record["diagnostic"] = (
+                "Independent validation failed: "
+                + run["html_url"]
+                + "; steps: "
+                + (", ".join(failed) or run["conclusion"])
+            )
             if (
                 run["conclusion"] != "failure"
                 or not failed
@@ -795,15 +972,12 @@ class Coordinator:
                 self.issue(
                     record,
                     "Infrastructure, dependency setup, cancellation, or policy failure needs review; no repeated model calls. "
-                    + run["html_url"],
+                    + record["diagnostic"],
                 )
             else:
                 self.repair(
                     record,
-                    "Independent validation failed: "
-                    + run["html_url"]
-                    + "; steps: "
-                    + ", ".join(failed),
+                    record["diagnostic"],
                 )
             return
         if record.get("pr") and not record.get("reviewed"):
