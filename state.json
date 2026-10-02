@@ -110,7 +110,8 @@
       "diagnostic": "Mechanical integration has merge conflicts; inspect the candidate conflict markers",
       "repair_request": "c82f22a13c7e4944990e1fbeea42d2db",
       "reviewed": false,
-      "request": "2407327c178545c9a4aaeb8795baf34d"
+      "request": "2407327c178545c9a4aaeb8795baf34d",
+      "build_run": 36994352215
     }
   ]
 }
