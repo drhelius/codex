@@ -99,7 +99,7 @@
       "published_at": "2026-10-01T20:19:13Z",
       "revision": 1,
       "branch": "fork-candidates/401312540-r1",
-      "status": "building",
+      "status": "review",
       "attempts": 1,
       "pr": 9,
       "base_sha": "e79ee926ee4021a5e17a159be62688651406cfcc",
