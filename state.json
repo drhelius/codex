@@ -91,6 +91,17 @@
       "build_run": 36867272243,
       "fork_release": "https://github.com/drhelius/codex/releases/tag/mcp-rust-v0.159.3-r1",
       "fork_sha": "e79ee926ee4021a5e17a159be62688651406cfcc"
+    },
+    {
+      "id": 401312540,
+      "tag": "rust-v0.160.0",
+      "upstream_sha": "a956835d020762cb2b570053af06f643a11c0ecc",
+      "published_at": "2026-10-01T20:19:13Z",
+      "revision": 1,
+      "branch": "fork-candidates/401312540-r1",
+      "status": "pending",
+      "attempts": 0,
+      "pr": null
     }
   ]
 }
