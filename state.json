@@ -99,9 +99,14 @@
       "published_at": "2026-10-01T20:19:13Z",
       "revision": 1,
       "branch": "fork-candidates/401312540-r1",
-      "status": "pending",
+      "status": "integrated",
       "attempts": 0,
-      "pr": null
+      "pr": null,
+      "base_sha": "e79ee926ee4021a5e17a159be62688651406cfcc",
+      "policy_sha": "e79ee926ee4021a5e17a159be62688651406cfcc",
+      "source_sha": "8908cb6268d159e7e0d6120950bd40939666488f",
+      "integration_sha": "8908cb6268d159e7e0d6120950bd40939666488f",
+      "conflicts": "100644 01a121bf78335f0c344af1beddfc6f634464f391 1\tcodex-rs/Cargo.lock\n100644 080a690aa1e81d1a5dc51ca7741bf561b7e41c66 2\tcodex-rs/Cargo.lock\n100644 19885ae975045bffffbae13dcaa78e003b815d40 3\tcodex-rs/Cargo.lock\n100644 adceeb5ed9022d3e9d54fb1a780354c2385be6b7 1\tcodex-rs/Cargo.toml\n100644 d9f658f3ede5a3a81a3f5427c02cc4b413805a52 2\tcodex-rs/Cargo.toml\n100644 1a60bc36f8350f25c8ef6d6d7096354d9aaf5314 3\tcodex-rs/Cargo.toml\n\nAuto-merging codex-rs/Cargo.lock\nCONFLICT (content): Merge conflict in codex-rs/Cargo.lock\nAuto-merging codex-rs/Cargo.toml\nCONFLICT (content): Merge conflict in codex-rs/Cargo.toml\nAuto-merging codex-rs/core/src/config/mod.rs\nAuto-merging codex-rs/core/src/session/mod.rs\nAuto-merging codex-rs/core/src/session/turn.rs\nAuto-merging codex-rs/core/tests/suite/mod.rs\nAuto-merging codex-rs/model-provider-info/src/lib.rs\nAuto-merging codex-rs/model-provider/src/provider.rs\nAuto-merging codex-rs/tui/src/app.rs\nAuto-merging codex-rs/tui/src/app/app_server_events.rs\nAuto-merging codex-rs/tui/src/app/event_dispatch.rs\nAuto-merging codex-rs/tui/src/app/reconnect.rs\nAuto-merging codex-rs/tui/src/app/session_lifecycle.rs\nAuto-merging codex-rs/tui/src/app/startup.rs\nAuto-merging codex-rs/tui/src/app/tests.rs\nAuto-merging codex-rs/tui/src/app/tests/startup_defaults_tests.rs\nAuto-merging codex-rs/tui/src/app_event.rs\nAuto-merging codex-rs/tui/src/chatwidget.rs\nAuto-merging codex-rs/tui/src/lib.rs"
     }
   ]
 }
