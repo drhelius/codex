@@ -5076,7 +5076,11 @@ dependencies = [
 
 [[package]]
 name = "codex-utils-process"
+<<<<<<< e79ee926ee4021a5e17a159be62688651406cfcc
 version = "0.159.3"
+=======
+version = "0.0.0"
+>>>>>>> a956835d020762cb2b570053af06f643a11c0ecc
 dependencies = [
  "pretty_assertions",
  "tokio",
@@ -8497,9 +8501,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.16"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9f37a958b41b3b19ee2707c06439c0e9e547e847223eb791ecb0cb821c65e27"
+checksum = "ef8e5e5a340588f4452631496976cf8636d4a7ecf600239fdc27615d2530bc16"
 dependencies = [
  "atomic-waker",
  "bytes",
